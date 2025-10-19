@@ -115,18 +115,43 @@ export async function POST(request: Request) {
         sha: commit.sha.substring(0, 7),
         url: commit.html_url
       })),
-      openIssues: issuesResponse.data.slice(0, 10).map((issue) => ({
-        title: issue.title,
-        body: issue.body,
-        labels: issue.labels?.map((label: any) => label.name) ?? [],
-        assignees: issue.assignees?.map((assignee: any) => assignee.login) ?? [],
-        url: issue.html_url
-      })),
+      openIssues: issuesResponse.data.slice(0, 10).map((issue) => {
+        const labelNames = 
+          Array.isArray(issue.labels) ? issue.labels
+          .map((l) => (typeof l === 'string' ? l : l?.name ?? ''))
+          .filter((x): x is string => x.length > 0)
+          : [];
+
+        const assigneeLogins =
+          Array.isArray(issue.assignees)
+            ? issue.assignees
+              .map((a) => a?.login ?? '')
+              .filter((x): x is string => x.length > 0)
+            : [];
+
+        return {
+          title: issue.title,
+          body: issue.body ?? null,
+          labels: labelNames,
+          assignees: assigneeLogins,
+          url: issue.html_url
+        };
+      }),
       openPullRequests: pullRequestsResponse.data.slice(0, 10).map((pr) => ({
         title: pr.title,
         body: pr.body,
         author: pr.user?.login ?? null,
-        labels: pr.labels?.map((label: any) => label.name) ?? [],
+        labels: (pr.labels ?? [])
+          .map((label) => {
+            if (typeof label === 'string') {
+              return label;
+            }
+            if (typeof label === 'object' && label !== null && 'name' in label && typeof label.name === 'string') {
+              return label.name;
+            }
+            return '';
+          })
+          .filter((name): name is string => name.length > 0),
         url: pr.html_url
       }))
     };

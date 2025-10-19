@@ -65,6 +65,19 @@ type SectionResponse = {
   note?: string | null;
 };
 
+type OpenAIContentFragment = {
+  text?: string;
+};
+
+type OpenAIOutputChunk = {
+  content?: OpenAIContentFragment[];
+};
+
+type OpenAIResponsePayload = {
+  output_text?: string;
+  output?: OpenAIOutputChunk[];
+};
+
 const SECTION_RESPONSE_SHAPES: Record<SectionKey, string> = {
   roadmap: `{
   "items": [
@@ -336,7 +349,7 @@ ${expectedShape}`;
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-mini',
+        model: 'gpt-4.1-2025-04-14',
         input: [
           {
             role: 'system',
@@ -366,10 +379,10 @@ ${expectedShape}`;
       );
     }
 
-    const data = await response.json();
+    const data = await response.json() as OpenAIResponsePayload;
     const outputText = data.output_text ??
       data.output?.[0]?.content?.[0]?.text ??
-      data.output?.[0]?.content?.map((item: any) => item?.text ?? '').join('').trim();
+      data.output?.[0]?.content?.map((item) => item?.text ?? '').join('').trim();
 
     if (!outputText) {
       return NextResponse.json(
@@ -389,28 +402,37 @@ ${expectedShape}`;
       );
     }
 
-    const normalizeReference = (ref: any) => {
+    const normalizeReference = (ref: unknown) => {
       if (!ref) {
         return null;
       }
 
-      const rawTitle = typeof ref === 'string' ? ref : ref.title;
-      const title = rawTitle?.trim();
-      if (!title) {
+      if (typeof ref === 'string') {
+        const trimmedTitle = ref.trim();
+        if (!trimmedTitle) {
+          return null;
+        }
+        const canonicalByTitle = referenceIndex.get(trimmedTitle) ?? referenceIndexLower.get(trimmedTitle.toLowerCase());
+        return canonicalByTitle ?? null;
+      }
+
+      if (typeof ref !== 'object') {
         return null;
       }
 
-      const canonical = referenceIndex.get(title) ?? referenceIndexLower.get(title.toLowerCase());
+      const candidate = ref as { title?: unknown; url?: unknown };
+      const rawTitle = typeof candidate.title === 'string' ? candidate.title.trim() : '';
+      if (!rawTitle) {
+        return null;
+      }
+
+      const canonical = referenceIndex.get(rawTitle) ?? referenceIndexLower.get(rawTitle.toLowerCase());
       if (canonical) {
         return { title: canonical.title, url: canonical.url };
       }
 
-      const url = typeof ref === 'string' ? undefined : ref.url;
-      if (!url) {
-        return null;
-      }
-
-      return { title, url };
+      const url = typeof candidate.url === 'string' ? candidate.url : undefined;
+      return url ? { title: rawTitle, url } : null;
     };
 
     const ensureStringArray = (value: unknown): string[] => {
@@ -426,32 +448,33 @@ ${expectedShape}`;
     };
 
     if (Array.isArray(parsed.items)) {
-      parsed.items = parsed.items.map((item: any) => {
+      parsed.items = parsed.items.map((item) => {
         if (item && typeof item === 'object') {
-          if (Array.isArray(item.references)) {
-            const normalizedRefs = item.references
-              .map((ref: any) => normalizeReference(ref))
+          const references = (item as { references?: unknown }).references;
+          if (Array.isArray(references)) {
+            const normalizedRefs = references
+              .map((ref) => normalizeReference(ref))
               .filter((ref): ref is { title: string; url: string } => Boolean(ref && ref.url));
-            item.references = normalizedRefs;
+            (item as { references?: Array<{ title: string; url: string }> }).references = normalizedRefs;
           }
 
-          if (item.reference) {
-            const normalized = normalizeReference(item.reference);
+          if ('reference' in item) {
+            const normalized = normalizeReference((item as { reference?: unknown }).reference);
             if (normalized) {
-              item.reference = normalized;
+              (item as { reference?: { title: string; url: string } }).reference = normalized;
             } else {
-              delete item.reference;
+              delete (item as { reference?: unknown }).reference;
             }
           }
 
-          item.keyTasks = ensureStringArray(item.keyTasks);
-          item.successCriteria = ensureStringArray(item.successCriteria);
-          item.technicalConsiderations = ensureStringArray(item.technicalConsiderations);
-          item.openQuestions = ensureStringArray(item.openQuestions);
-          item.recommendedActions = ensureStringArray(item.recommendedActions);
-          item.validationPlan = ensureStringArray(item.validationPlan);
-          item.validationSteps = ensureStringArray(item.validationSteps);
-          item.owners = ensureStringArray(item.owners);
+          (item as { keyTasks?: string[] }).keyTasks = ensureStringArray((item as { keyTasks?: unknown }).keyTasks);
+          (item as { successCriteria?: string[] }).successCriteria = ensureStringArray((item as { successCriteria?: unknown }).successCriteria);
+          (item as { technicalConsiderations?: string[] }).technicalConsiderations = ensureStringArray((item as { technicalConsiderations?: unknown }).technicalConsiderations);
+          (item as { openQuestions?: string[] }).openQuestions = ensureStringArray((item as { openQuestions?: unknown }).openQuestions);
+          (item as { recommendedActions?: string[] }).recommendedActions = ensureStringArray((item as { recommendedActions?: unknown }).recommendedActions);
+          (item as { validationPlan?: string[] }).validationPlan = ensureStringArray((item as { validationPlan?: unknown }).validationPlan);
+          (item as { validationSteps?: string[] }).validationSteps = ensureStringArray((item as { validationSteps?: unknown }).validationSteps);
+          (item as { owners?: string[] }).owners = ensureStringArray((item as { owners?: unknown }).owners);
         }
         return item;
       });

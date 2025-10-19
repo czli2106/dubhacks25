@@ -100,8 +100,9 @@ export default function LoadingPage() {
         });
 
         window.location.href = `/insights?${params.toString()}`;
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to analyze repository.';
+        setError(message);
         setIsLoading(false);
         setIsRedirecting(false);
       }
@@ -240,7 +241,7 @@ export default function LoadingPage() {
                 </div>
               </div>
               <div className="grid gap-4 max-h-96 overflow-y-auto">
-                {commits.slice(0, 50).map((commit, index) => {
+                {commits.slice(0, 50).map((commit) => {
                   const commitType = getCommitType(commit.commit.message);
                   return (
                     <div key={commit.sha} className="p-4 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200">

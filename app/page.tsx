@@ -3,19 +3,6 @@
 
 import { useState, useEffect } from 'react';
 
-// Define a type for the commit data we expect
-type Commit = {
-  sha: string;
-  commit: {
-    author: {
-      name: string | null;
-      date: string;
-    };
-    message: string;
-  };
-  html_url: string;
-};
-
 export default function HomePage() {
   const [repoUrl, setRepoUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -103,31 +90,11 @@ export default function HomePage() {
       const repoName = urlParts[4];
       
       window.location.href = `/loading?repo=${encodeURIComponent(repoUrl)}&owner=${encodeURIComponent(owner)}&repoName=${encodeURIComponent(repoName)}`;
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unable to start analysis. Check the repository URL and try again.';
+      setError(message);
       setIsLoading(false);
     }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const getCommitType = (message: string) => {
-    const firstLine = message.split('\n')[0].toLowerCase();
-    if (firstLine.startsWith('feat')) return { type: 'feature', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' };
-    if (firstLine.startsWith('fix')) return { type: 'fix', color: 'bg-red-500/20 text-red-400 border-red-500/30' };
-    if (firstLine.startsWith('docs')) return { type: 'docs', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' };
-    if (firstLine.startsWith('style')) return { type: 'style', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' };
-    if (firstLine.startsWith('refactor')) return { type: 'refactor', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' };
-    if (firstLine.startsWith('test')) return { type: 'test', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' };
-    return { type: 'other', color: 'bg-gray-500/20 text-gray-400 border-gray-500/30' };
   };
 
   return (
