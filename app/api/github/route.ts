@@ -5,12 +5,21 @@ import { Octokit } from '@octokit/rest';
 
 export async function POST(request: Request) {
   try {
-    const { repoUrl, token } = await request.json();
+    const { repoUrl } = await request.json();
 
-    if (!repoUrl || !token) {
+    if (!repoUrl) {
       return NextResponse.json(
-        { error: 'Repository URL and GitHub token are required.' },
+        { error: 'Repository URL is required.' },
         { status: 400 }
+      );
+    }
+
+    // Use environment variable for GitHub token
+    const token = process.env.GITHUB_TOKEN;
+    if (!token) {
+      return NextResponse.json(
+        { error: 'GitHub token not configured.' },
+        { status: 500 }
       );
     }
 

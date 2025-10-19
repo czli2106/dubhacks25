@@ -5,12 +5,21 @@ import { Octokit } from '@octokit/rest';
 
 export async function POST(request: Request) {
   try {
-    const { repoUrl, commits, token } = await request.json();
+    const { repoUrl, commits } = await request.json();
 
-    if (!repoUrl || !commits || !token) {
+    if (!repoUrl || !commits) {
       return NextResponse.json(
-        { error: 'Repository URL, commits data, and GitHub token are required.' },
+        { error: 'Repository URL and commits data are required.' },
         { status: 400 }
+      );
+    }
+
+    // Use environment variable for GitHub token
+    const token = process.env.GITHUB_TOKEN;
+    if (!token) {
+      return NextResponse.json(
+        { error: 'GitHub token not configured.' },
+        { status: 500 }
       );
     }
 
@@ -67,6 +76,75 @@ export async function POST(request: Request) {
       }))
     };
 
+    // Fetch prompts from FastAPI backend
+    let customPrompts;
+    try {
+      const promptsResponse = await fetch(`${process.env.FASTAPI_BASE_URL || 'http://localhost:8000'}/prompts`);
+      if (!promptsResponse.ok) {
+        throw new Error('Failed to fetch prompts from backend');
+      }
+      const promptsData = await promptsResponse.json();
+      customPrompts = promptsData.prompts;
+    } catch (error) {
+      console.error('Error fetching prompts from backend:', error);
+      // Fallback to default prompts if backend is unavailable
+      customPrompts = {
+        roadmap: `Analyze the repository data and provide strategic roadmap recommendations. Focus on:
+1. Feature gaps based on commit patterns
+2. Technical debt that should be prioritized
+3. Performance improvements needed
+4. User experience enhancements
+5. Scalability considerations
+
+Provide 3-5 roadmap items with titles, descriptions, priority levels (High/Medium/Low), and estimated effort.`,
+        
+        vulnerabilities: `Analyze the repository for potential security issues and vulnerabilities. Look for:
+1. Security anti-patterns in commit messages
+2. Dependencies that might have known vulnerabilities
+3. Code patterns that could lead to security issues
+4. Missing security best practices
+5. Authentication and authorization concerns
+
+Provide 3-5 security items with titles, descriptions, severity levels (Critical/High/Medium/Low), and specific recommendations.`,
+        
+        teamAssignments: `Based on the repository structure and commit patterns, recommend team assignments. Consider:
+1. Code ownership patterns from commit history
+2. Technology stack expertise requirements
+3. Feature areas that need dedicated ownership
+4. Cross-functional collaboration opportunities
+5. Skill development needs
+
+Provide 3-5 assignment recommendations with specific tasks, suggested team member roles, and reasoning.`,
+        
+        newFeatures: `Analyze the current functionality and suggest valuable new features. Consider:
+1. User pain points that could be addressed
+2. Market opportunities based on the tech stack
+3. Integration possibilities with other tools
+4. Performance and scalability improvements
+5. User experience enhancements
+
+Provide 3-5 feature suggestions with titles, descriptions, impact assessment (High/Medium/Low), and implementation complexity.`,
+        
+        technicalDebt: `Identify technical debt and code quality issues. Look for:
+1. Code duplication patterns
+2. Outdated dependencies or patterns
+3. Performance bottlenecks
+4. Maintainability issues
+5. Testing gaps
+
+Provide 3-5 technical debt items with specific issues, descriptions, priority levels, and effort estimates.`,
+        
+        performance: `Analyze potential performance issues and optimization opportunities. Consider:
+1. Database query optimization needs
+2. Caching opportunities
+3. Frontend performance improvements
+4. API optimization potential
+5. Resource usage optimization
+
+Provide 3-5 performance recommendations with specific areas, descriptions, and optimization strategies.`
+      };
+    }
+
     // Create comprehensive AI prompt
     const prompt = `
 You are an expert Product Manager analyzing a GitHub repository. Based on the following data, provide actionable insights in JSON format.
@@ -83,13 +161,13 @@ Repository Data:
 - Last Updated: ${analysisData.repository.updatedAt}
 
 Recent Commits (${analysisData.recentCommits.length}):
-${analysisData.recentCommits.map(commit => `- ${commit.message.split('\n')[0]} (${commit.author}, ${commit.date})`).join('\n')}
+${analysisData.recentCommits.map((commit: any) => `- ${commit.message.split('\n')[0]} (${commit.author}, ${commit.date})`).join('\n')}
 
 Open Issues (${analysisData.openIssues.length}):
-${analysisData.openIssues.map(issue => `- ${issue.title} (Labels: ${issue.labels.join(', ')})`).join('\n')}
+${analysisData.openIssues.map((issue: any) => `- ${issue.title} (Labels: ${issue.labels.join(', ')})`).join('\n')}
 
 Open Pull Requests (${analysisData.openPullRequests.length}):
-${analysisData.openPullRequests.map(pr => `- ${pr.title} (Author: ${pr.author})`).join('\n')}
+${analysisData.openPullRequests.map((pr: any) => `- ${pr.title} (Author: ${pr.author})`).join('\n')}
 
 Please analyze this data and provide insights in the following JSON structure:
 
@@ -142,15 +220,12 @@ Please analyze this data and provide insights in the following JSON structure:
   ]
 }
 
-Focus on:
-1. Product roadmap items based on commit patterns and issues
-2. Security vulnerabilities from code patterns and dependencies
-3. Team assignments based on code ownership and expertise areas
-4. New features that would add value based on current functionality
-5. Technical debt that should be addressed
-6. Performance optimizations
+Analysis Guidelines:
+${Object.entries(customPrompts).map(([category, promptData]) => 
+  `${category.toUpperCase()}: ${typeof promptData === 'string' ? promptData : promptData.prompt}`
+).join('\n\n')}
 
-Be specific and actionable. Provide 3-5 items for each category.
+Be specific and actionable. Provide 3-5 items for each category. Include GitHub links where relevant (use format: [text](https://github.com/${owner}/${repo}/issues/123) for issues, [text](https://github.com/${owner}/${repo}/pull/456) for PRs, [text](https://github.com/${owner}/${repo}/commit/abc123) for commits).
 `;
 
     // Call OpenAI API
