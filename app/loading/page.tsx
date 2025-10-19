@@ -1,7 +1,7 @@
 // File: app/loading/page.tsx
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 type Commit = {
@@ -16,7 +16,7 @@ type Commit = {
   html_url: string;
 };
 
-export default function LoadingPage() {
+function LoadingContent() {
   const searchParams = useSearchParams();
   const [commits, setCommits] = useState<Commit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -297,5 +297,13 @@ export default function LoadingPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function LoadingPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoadingContent />
+    </Suspense>
   );
 }

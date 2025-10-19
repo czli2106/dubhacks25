@@ -1,8 +1,10 @@
-// File: app/insights/page.tsx
 "use client";
 
+import { JSX, Suspense } from 'react';
 import { useEffect, useState, ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
+
+export const dynamic = 'force-dynamic';
 
 declare global {
   interface Window {
@@ -304,7 +306,7 @@ const SECTION_RENDER_CONFIG: Record<SectionKey, SectionRenderConfig> = {
   }
 };
 
-export default function InsightsPage() {
+function InsightsBody() {
   const searchParams = useSearchParams();
   const repoUrl = searchParams.get('repo');
   const owner = searchParams.get('owner');
@@ -1704,4 +1706,12 @@ function badgeClass(type: 'priority' | 'severity' | 'impact' | 'complexity', val
     return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
   }
   return 'bg-green-500/20 text-green-400 border-green-500/30';
+}
+
+export default function InsightsPage() {
+  return (
+    <Suspense fallback={null}>
+      <InsightsBody />
+    </Suspense>
+  );
 }
