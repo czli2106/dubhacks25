@@ -25,6 +25,9 @@ export default function HomePage() {
   const [typingText, setTypingText] = useState('');
   const [tokenTypingText, setTokenTypingText] = useState('');
   const [particles, setParticles] = useState<Array<{id: number, x: number, y: number, size: number, speed: number}>>([]);
+  const [activeTab, setActiveTab] = useState<'commits' | 'insights'>('commits');
+  const [aiInsights, setAiInsights] = useState<any>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Typing animation for repository URL placeholder
   useEffect(() => {
@@ -136,10 +139,13 @@ export default function HomePage() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsLoading(true);
+    setIsAnalyzing(true);
     setError(null);
     setCommits([]);
+    setAiInsights(null);
 
     try {
+      // First, get the commits
       const response = await fetch('/api/github', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -153,10 +159,32 @@ export default function HomePage() {
 
       const data = await response.json();
       setCommits(data.commits);
+      setIsLoading(false);
+
+      // Then, analyze with AI
+      const aiResponse = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          repoUrl, 
+          commits: data.commits,
+          token 
+        }),
+      });
+
+      if (!aiResponse.ok) {
+        const errorData = await aiResponse.json();
+        throw new Error(errorData.error || 'AI analysis failed');
+      }
+
+      const aiData = await aiResponse.json();
+      setAiInsights(aiData.insights);
+      setActiveTab('insights'); // Switch to insights tab
     } catch (err: any) {
       setError(err.message);
     } finally {
       setIsLoading(false);
+      setIsAnalyzing(false);
     }
   };
 
@@ -300,21 +328,26 @@ export default function HomePage() {
               
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || isAnalyzing}
                 className="group relative w-full py-4 px-6 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl font-semibold text-white hover:from-purple-700 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg hover:shadow-purple-500/25 overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
                 {isLoading ? (
                   <div className="flex items-center justify-center space-x-2 relative z-10">
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    <span>Analyzing Repository...</span>
+                    <span>Fetching Commits...</span>
+                  </div>
+                ) : isAnalyzing ? (
+                  <div className="flex items-center justify-center space-x-2 relative z-10">
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>AI Analyzing Repository...</span>
                   </div>
                 ) : (
                   <div className="flex items-center justify-center space-x-2 relative z-10">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
-                    <span>Analyze Repository</span>
+                    <span>Analyze with AI</span>
                   </div>
                 )}
               </button>
@@ -327,29 +360,68 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* Commits Display */}
-          {commits.length > 0 && (
+          {/* Results Display */}
+          {(commits.length > 0 || aiInsights) && (
             <div className="space-y-6 animate-fade-in-up">
-              <div className="text-center">
-                <div className="relative inline-block">
-                  <h2 className="text-3xl font-bold text-white mb-2 relative">
-                    Recent Commits
-                    <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full"></div>
-                  </h2>
-                </div>
-                <div className="flex items-center justify-center space-x-4 mt-4">
-                  <div className="flex items-center space-x-2 text-sm text-gray-400">
-                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                    <span>{commits.length} commits found</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-sm text-gray-400">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>Updated just now</span>
-                  </div>
+              {/* Tab Navigation */}
+              <div className="flex justify-center">
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-1">
+                  <button
+                    onClick={() => setActiveTab('commits')}
+                    className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+                      activeTab === 'commits'
+                        ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span>Commits ({commits.length})</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('insights')}
+                    className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+                      activeTab === 'insights'
+                        ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      <span>AI Insights</span>
+                    </div>
+                  </button>
                 </div>
               </div>
+
+              {/* Tab Content */}
+              {activeTab === 'commits' && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <div className="relative inline-block">
+                      <h2 className="text-3xl font-bold text-white mb-2 relative">
+                        Recent Commits
+                        <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full"></div>
+                      </h2>
+                    </div>
+                    <div className="flex items-center justify-center space-x-4 mt-4">
+                      <div className="flex items-center space-x-2 text-sm text-gray-400">
+                        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                        <span>{commits.length} commits found</span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-sm text-gray-400">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Updated just now</span>
+                      </div>
+                    </div>
+                  </div>
               
               <div className="grid gap-4">
                 {commits.map((commit, index) => {
@@ -428,6 +500,154 @@ export default function HomePage() {
                   );
                 })}
               </div>
+                </div>
+              )}
+
+              {/* AI Insights Tab */}
+              {activeTab === 'insights' && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <div className="relative inline-block">
+                      <h2 className="text-3xl font-bold text-white mb-2 relative">
+                        AI Product Insights
+                        <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full"></div>
+                      </h2>
+                    </div>
+                    <p className="text-gray-400 mt-2">Intelligent analysis powered by AI</p>
+                  </div>
+
+                  {isAnalyzing ? (
+                    <div className="text-center py-12">
+                      <div className="inline-flex items-center space-x-3">
+                        <div className="w-8 h-8 border-3 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
+                        <span className="text-lg text-gray-300">AI is analyzing your repository...</span>
+                      </div>
+                    </div>
+                  ) : aiInsights ? (
+                    <div className="grid gap-6">
+                      {/* Roadmap Section */}
+                      {aiInsights.roadmap && (
+                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-6">
+                          <div className="flex items-center space-x-3 mb-4">
+                            <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
+                              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                              </svg>
+                            </div>
+                            <h3 className="text-xl font-bold text-white">Product Roadmap</h3>
+                          </div>
+                          <div className="space-y-3">
+                            {aiInsights.roadmap.map((item: any, index: number) => (
+                              <div key={index} className="flex items-start space-x-3 p-3 bg-white/5 rounded-lg">
+                                <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div>
+                                <div>
+                                  <h4 className="font-medium text-white">{item.title}</h4>
+                                  <p className="text-gray-400 text-sm">{item.description}</p>
+                                  <span className="inline-block mt-1 px-2 py-1 bg-purple-500/20 text-purple-300 text-xs rounded">
+                                    {item.priority}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Vulnerabilities Section */}
+                      {aiInsights.vulnerabilities && (
+                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-6">
+                          <div className="flex items-center space-x-3 mb-4">
+                            <div className="w-10 h-10 bg-gradient-to-r from-red-500 to-orange-500 rounded-lg flex items-center justify-center">
+                              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                              </svg>
+                            </div>
+                            <h3 className="text-xl font-bold text-white">Security & Vulnerabilities</h3>
+                          </div>
+                          <div className="space-y-3">
+                            {aiInsights.vulnerabilities.map((vuln: any, index: number) => (
+                              <div key={index} className="flex items-start space-x-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                                <div className="w-2 h-2 bg-red-400 rounded-full mt-2 flex-shrink-0"></div>
+                                <div>
+                                  <h4 className="font-medium text-white">{vuln.title}</h4>
+                                  <p className="text-gray-400 text-sm">{vuln.description}</p>
+                                  <span className="inline-block mt-1 px-2 py-1 bg-red-500/20 text-red-300 text-xs rounded">
+                                    {vuln.severity}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Team Assignments Section */}
+                      {aiInsights.teamAssignments && (
+                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-6">
+                          <div className="flex items-center space-x-3 mb-4">
+                            <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-teal-500 rounded-lg flex items-center justify-center">
+                              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                              </svg>
+                            </div>
+                            <h3 className="text-xl font-bold text-white">Team Assignments</h3>
+                          </div>
+                          <div className="space-y-3">
+                            {aiInsights.teamAssignments.map((assignment: any, index: number) => (
+                              <div key={index} className="flex items-start space-x-3 p-3 bg-white/5 rounded-lg">
+                                <div className="w-2 h-2 bg-green-400 rounded-full mt-2 flex-shrink-0"></div>
+                                <div>
+                                  <h4 className="font-medium text-white">{assignment.task}</h4>
+                                  <p className="text-gray-400 text-sm">Assigned to: <span className="text-green-400">{assignment.assignee}</span></p>
+                                  <p className="text-gray-400 text-sm">{assignment.reason}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* New Features Section */}
+                      {aiInsights.newFeatures && (
+                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-6">
+                          <div className="flex items-center space-x-3 mb-4">
+                            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
+                              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                            </div>
+                            <h3 className="text-xl font-bold text-white">Suggested New Features</h3>
+                          </div>
+                          <div className="space-y-3">
+                            {aiInsights.newFeatures.map((feature: any, index: number) => (
+                              <div key={index} className="flex items-start space-x-3 p-3 bg-white/5 rounded-lg">
+                                <div className="w-2 h-2 bg-blue-400 rounded-full mt-2 flex-shrink-0"></div>
+                                <div>
+                                  <h4 className="font-medium text-white">{feature.title}</h4>
+                                  <p className="text-gray-400 text-sm">{feature.description}</p>
+                                  <span className="inline-block mt-1 px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded">
+                                    {feature.impact}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-medium text-white mb-2">No AI insights yet</h3>
+                      <p className="text-gray-400">Analyze a repository to get intelligent product management insights</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
           
