@@ -553,6 +553,9 @@ export default function InsightsPage() {
   };
 
   const toggleBriefcaseItem = (section: SectionKey, index: number) => {
+    if (!BRIEFCASE_SECTIONS.includes(section)) {
+      return;
+    }
     setBriefcaseSelections((prev) => {
       const current = new Set(prev[section] ?? []);
       if (current.has(index)) {
@@ -1112,21 +1115,27 @@ function renderSectionContent(
   const items = dataMap[section] as unknown[];
   const note = noteMap[section];
   const selectedIndices = new Set(selectionMap[section] ?? []);
+  const isBriefcaseSection = BRIEFCASE_SECTIONS.includes(section);
 
-  const renderToggle = (index: number) => {
-    const selected = selectedIndices.has(index);
+  const renderToggle = (index: number, selected: boolean) => {
+    if (!isBriefcaseSection) {
+      return null;
+    }
+    const title = selected ? 'Remove from Maintainer Briefcase' : 'Add to Maintainer Briefcase';
     return (
       <button
         type="button"
         onClick={() => toggleSelection(section, index)}
-        className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+        className={`p-2 rounded-lg border transition-colors ${
           selected
-            ? 'bg-purple-500/20 text-purple-200 border-purple-400/40'
-            : 'bg-white/10 text-gray-300 border-white/20 hover:bg-white/20'
+            ? 'bg-purple-500/20 border-purple-400/60 text-purple-100'
+            : 'bg-white/5 border-white/20 text-gray-300 hover:bg-white/10'
         }`}
         aria-pressed={selected}
+        aria-label={title}
+        title={title}
       >
-        {selected ? 'Included' : 'Add to Briefcase'}
+        <BriefcaseIcon filled={selected} />
       </button>
     );
   };
@@ -1160,292 +1169,362 @@ function renderSectionContent(
 
   switch (section) {
     case 'roadmap':
-      content = (items as RoadmapItem[]).map((item, index) => (
-        <div key={index} className="p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200">
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <h3 className="text-lg font-semibold text-white">{item.title}</h3>
-              <p className="text-sm text-gray-300">{item.outcome}</p>
-            </div>
-            <div className="flex flex-col items-end gap-2">
-              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('priority', item.priority)}`}>
-                {item.priority}
+      content = (items as RoadmapItem[]).map((item, index) => {
+        const cardSelected = isBriefcaseSection && selectedIndices.has(index);
+        const toggleControl = renderToggle(index, cardSelected);
+        const cardClass = `p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200 ${
+          cardSelected ? 'border-purple-400/60 bg-purple-500/10 shadow-lg shadow-purple-900/30' : ''
+        }`;
+        return (
+          <div key={index} className={cardClass}>
+            {cardSelected && (
+              <span className="inline-flex items-center gap-2 text-xs text-purple-100 bg-purple-500/20 border border-purple-400/40 px-3 py-1 rounded-full mb-3">
+                <BriefcaseIcon filled />
+                Included in Maintainer Briefcase
               </span>
-              {renderToggle(index)}
-            </div>
-          </div>
-          {item.owners && item.owners.length > 0 && (
-            <div className="mb-3 text-sm text-gray-300">
-              <strong className="text-gray-200">Owners:</strong> {item.owners.join(', ')}
-            </div>
-          )}
-          <div className="grid gap-3">
-            {item.keyTasks && item.keyTasks.length > 0 && (
+            )}
+            <div className="flex items-start justify-between mb-3">
               <div>
-                <p className="text-sm text-gray-400 mb-1">Key tasks:</p>
-                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
-                  {item.keyTasks.map((task, idx) => (
-                    <li key={idx}>{task}</li>
-                  ))}
-                </ul>
+                <h3 className="text-lg font-semibold text-white">{item.title}</h3>
+                <p className="text-sm text-gray-300">{item.outcome}</p>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('priority', item.priority)}`}>
+                  {item.priority}
+                </span>
+                {toggleControl}
+              </div>
+            </div>
+            {item.owners && item.owners.length > 0 && (
+              <div className="mb-3 text-sm text-gray-300">
+                <strong className="text-gray-200">Owners:</strong> {item.owners.join(', ')}
               </div>
             )}
-            {item.successCriteria && item.successCriteria.length > 0 && (
-              <div>
-                <p className="text-sm text-gray-400 mb-1">Success criteria:</p>
-                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
-                  {item.successCriteria.map((criterion, idx) => (
-                    <li key={idx}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {item.estimatedEffort && (
-              <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
-                <strong>Effort estimate:</strong> {item.estimatedEffort}
-              </div>
-            )}
+            <div className="grid gap-3">
+              {item.keyTasks && item.keyTasks.length > 0 && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Key tasks:</p>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {item.keyTasks.map((task, idx) => (
+                      <li key={idx}>{task}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {item.successCriteria && item.successCriteria.length > 0 && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Success criteria:</p>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {item.successCriteria.map((criterion, idx) => (
+                      <li key={idx}>{criterion}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {item.estimatedEffort && (
+                <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
+                  <strong>Effort estimate:</strong> {item.estimatedEffort}
+                </div>
+              )}
+            </div>
+            <ReferencesBlock references={item.references} reference={item.reference} />
           </div>
-          <ReferencesBlock references={item.references} reference={item.reference} />
-        </div>
-      ));
+        );
+      });
       break;
     case 'vulnerabilities':
-      content = (items as VulnerabilityItem[]).map((item, index) => (
-        <div key={index} className="p-6 bg-red-500/10 border border-red-500/20 rounded-xl">
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <h3 className="text-lg font-semibold text-white">{item.title}</h3>
-              <p className="text-sm text-gray-300">{item.description}</p>
-            </div>
-            <div className="flex flex-col items-end gap-2">
-              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('severity', item.severity)}`}>
-                {item.severity}
+      content = (items as VulnerabilityItem[]).map((item, index) => {
+        const cardSelected = isBriefcaseSection && selectedIndices.has(index);
+        const toggleControl = renderToggle(index, cardSelected);
+        const cardClass = `p-6 bg-red-500/10 border border-red-500/20 rounded-xl transition-all duration-200 ${
+          cardSelected ? 'border-purple-400/60 bg-purple-500/15 shadow-lg shadow-purple-900/30' : ''
+        }`;
+        return (
+          <div key={index} className={cardClass}>
+            {cardSelected && (
+              <span className="inline-flex items-center gap-2 text-xs text-purple-100 bg-purple-500/20 border border-purple-400/40 px-3 py-1 rounded-full mb-3">
+                <BriefcaseIcon filled />
+                Included in Maintainer Briefcase
               </span>
-              {renderToggle(index)}
+            )}
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-lg font-semibold text-white">{item.title}</h3>
+                <p className="text-sm text-gray-300">{item.description}</p>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('severity', item.severity)}`}>
+                  {item.severity}
+                </span>
+                {toggleControl}
+              </div>
             </div>
+            {item.owners && item.owners.length > 0 && (
+              <div className="mb-3 text-sm text-gray-300">
+                <strong className="text-gray-200">Owners:</strong> {item.owners.join(', ')}
+              </div>
+            )}
+            {item.recommendation && (
+              <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300 mb-3">
+                <strong>Recommendation:</strong> {item.recommendation}
+              </div>
+            )}
+            <div className="grid gap-3">
+              {item.effortEstimate && (
+                <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
+                  <strong>Effort estimate:</strong> {item.effortEstimate}
+                </div>
+              )}
+              {item.validationSteps && item.validationSteps.length > 0 && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Validation steps:</p>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {item.validationSteps.map((step, idx) => (
+                      <li key={idx}>{step}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            <ReferencesBlock references={item.references} reference={item.reference} />
           </div>
-          {item.owners && item.owners.length > 0 && (
-            <div className="mb-3 text-sm text-gray-300">
-              <strong className="text-gray-200">Owners:</strong> {item.owners.join(', ')}
+        );
+      });
+      break;
+    case 'teamAssignments':
+      content = (items as AssignmentItem[]).map((item, index) => {
+        const cardClass = 'p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200';
+        return (
+          <div key={index} className={cardClass}>
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-lg font-semibold text-white">{item.task}</h3>
+                <div className="flex items-center space-x-2 text-sm text-gray-300">
+                  <span className="text-gray-400">Suggested role:</span>
+                  <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium">
+                    {item.assignee}
+                  </span>
+                </div>
+              </div>
             </div>
-          )}
-          {item.recommendation && (
+            <p className="text-gray-300 mb-3">{item.rationale}</p>
+            {item.supportPlan && (
+              <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
+                <strong>Support plan:</strong> {item.supportPlan}
+              </div>
+            )}
+            <ReferencesBlock references={undefined} reference={item.reference} />
+          </div>
+        );
+      });
+      break;
+    case 'newFeatures':
+      content = (items as FeatureItem[]).map((item, index) => {
+        const cardSelected = isBriefcaseSection && selectedIndices.has(index);
+        const toggleControl = renderToggle(index, cardSelected);
+        const cardClass = `p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200 ${
+          cardSelected ? 'border-purple-400/60 bg-purple-500/10 shadow-lg shadow-purple-900/30' : ''
+        }`;
+        return (
+          <div key={index} className={cardClass}>
+            {cardSelected && (
+              <span className="inline-flex items-center gap-2 text-xs text-purple-100 bg-purple-500/20 border border-purple-400/40 px-3 py-1 rounded-full mb-3">
+                <BriefcaseIcon filled />
+                Included in Maintainer Briefcase
+              </span>
+            )}
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-lg font-semibold text-white">{item.title}</h3>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('impact', item.impact)}`}>
+                    {item.impact} Impact
+                  </span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('complexity', item.complexity)}`}>
+                    {item.complexity}
+                  </span>
+                </div>
+                {toggleControl}
+              </div>
+            </div>
+            {item.owners && item.owners.length > 0 && (
+              <div className="mb-3 text-sm text-gray-300">
+                <strong className="text-gray-200">Owners:</strong> {item.owners.join(', ')}
+              </div>
+            )}
+            {item.background && (
+              <div className="mb-3">
+                <p className="text-sm text-gray-400 mb-1">Background</p>
+                <p className="text-sm text-gray-300">{item.background}</p>
+              </div>
+            )}
+            <p className="text-gray-300 mb-3">{item.userValue}</p>
+            <div className="grid gap-3">
+              {item.technicalConsiderations && item.technicalConsiderations.length > 0 && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Technical considerations:</p>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {item.technicalConsiderations.map((point, idx) => (
+                      <li key={idx}>{point}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {item.successCriteria && item.successCriteria.length > 0 && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Success criteria:</p>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {item.successCriteria.map((criterion, idx) => (
+                      <li key={idx}>{criterion}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {item.openQuestions && item.openQuestions.length > 0 && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Open questions:</p>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {item.openQuestions.map((question, idx) => (
+                      <li key={idx}>{question}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            <ReferencesBlock references={item.references} reference={item.reference} />
+          </div>
+        );
+      });
+      break;
+    case 'technicalDebt':
+      content = (items as TechnicalDebtItem[]).map((item, index) => {
+        const cardSelected = isBriefcaseSection && selectedIndices.has(index);
+        const toggleControl = renderToggle(index, cardSelected);
+        const cardClass = `p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200 ${
+          cardSelected ? 'border-purple-400/60 bg-purple-500/10 shadow-lg shadow-purple-900/30' : ''
+        }`;
+        return (
+          <div key={index} className={cardClass}>
+            {cardSelected && (
+              <span className="inline-flex items-center gap-2 text-xs text-purple-100 bg-purple-500/20 border border-purple-400/40 px-3 py-1 rounded-full mb-3">
+                <BriefcaseIcon filled />
+                Included in Maintainer Briefcase
+              </span>
+            )}
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-lg font-semibold text-white">{item.issue}</h3>
+                <p className="text-sm text-gray-300">{item.impact}</p>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('priority', item.priority)}`}>
+                  {item.priority}
+                </span>
+                {toggleControl}
+              </div>
+            </div>
+            {item.owners && item.owners.length > 0 && (
+              <div className="mb-3 text-sm text-gray-300">
+                <strong className="text-gray-200">Owners:</strong> {item.owners.join(', ')}
+              </div>
+            )}
+            <div className="grid gap-3">
+              {item.recommendedActions && item.recommendedActions.length > 0 && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Recommended actions:</p>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {item.recommendedActions.map((action, idx) => (
+                      <li key={idx}>{action}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {item.validationSteps && item.validationSteps.length > 0 && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Validation steps:</p>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {item.validationSteps.map((step, idx) => (
+                      <li key={idx}>{step}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {item.effortEstimate && (
+                <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
+                  <strong>Effort:</strong> {item.effortEstimate}
+                </div>
+              )}
+            </div>
+            <ReferencesBlock references={item.references} reference={item.reference} />
+          </div>
+        );
+      });
+      break;
+    case 'performance':
+      content = (items as PerformanceItem[]).map((item, index) => {
+        const cardSelected = isBriefcaseSection && selectedIndices.has(index);
+        const toggleControl = renderToggle(index, cardSelected);
+        const cardClass = `p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200 ${
+          cardSelected ? 'border-purple-400/60 bg-purple-500/10 shadow-lg shadow-purple-900/30' : ''
+        }`;
+        return (
+          <div key={index} className={cardClass}>
+            {cardSelected && (
+              <span className="inline-flex items-center gap-2 text-xs text-purple-100 bg-purple-500/20 border border-purple-400/40 px-3 py-1 rounded-full mb-3">
+                <BriefcaseIcon filled />
+                Included in Maintainer Briefcase
+              </span>
+            )}
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-lg font-semibold text-white">{item.area}</h3>
+                <p className="text-sm text-gray-300">{item.problemStatement}</p>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('impact', item.expectedImpact)}`}>
+                  {item.expectedImpact} Impact
+                </span>
+                {toggleControl}
+              </div>
+            </div>
+            {item.owners && item.owners.length > 0 && (
+              <div className="mb-3 text-sm text-gray-300">
+                <strong className="text-gray-200">Owners:</strong> {item.owners.join(', ')}
+              </div>
+            )}
             <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300 mb-3">
               <strong>Recommendation:</strong> {item.recommendation}
             </div>
-          )}
-          <div className="grid gap-3">
-            {item.effortEstimate && (
-              <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
-                <strong>Effort estimate:</strong> {item.effortEstimate}
-              </div>
-            )}
-            {item.validationSteps && item.validationSteps.length > 0 && (
-              <div>
-                <p className="text-sm text-gray-400 mb-1">Validation steps:</p>
-                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
-                  {item.validationSteps.map((step, idx) => (
-                    <li key={idx}>{step}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-          <ReferencesBlock references={item.references} reference={item.reference} />
-        </div>
-      ));
-      break;
-    case 'teamAssignments':
-      content = (items as AssignmentItem[]).map((item, index) => (
-        <div key={index} className="p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200">
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <h3 className="text-lg font-semibold text-white">{item.task}</h3>
-              <div className="flex items-center space-x-2 text-sm text-gray-300">
-                <span className="text-gray-400">Suggested role:</span>
-                <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium">
-                  {item.assignee}
-                </span>
-              </div>
-            </div>
-            {renderToggle(index)}
-          </div>
-          <p className="text-gray-300 mb-3">{item.rationale}</p>
-          {item.supportPlan && (
-            <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
-              <strong>Support plan:</strong> {item.supportPlan}
-            </div>
-          )}
-          <ReferencesBlock references={undefined} reference={item.reference} />
-        </div>
-      ));
-      break;
-    case 'newFeatures':
-      content = (items as FeatureItem[]).map((item, index) => (
-        <div key={index} className="p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200">
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <h3 className="text-lg font-semibold text-white">{item.title}</h3>
-              <div className="flex flex-wrap gap-2 mt-2">
-                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('impact', item.impact)}`}>
-                  {item.impact} Impact
-                </span>
-                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('complexity', item.complexity)}`}>
-                  {item.complexity}
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-col items-end gap-2">
-              {item.owners && item.owners.length > 0 && (
-                <span className="text-xs text-gray-300">Owners: {item.owners.join(', ')}</span>
+            <div className="grid gap-3">
+              {item.validationPlan && item.validationPlan.length > 0 && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Validation plan:</p>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {item.validationPlan.map((step, idx) => (
+                      <li key={idx}>{step}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
-              {renderToggle(index)}
+              {item.effortEstimate && (
+                <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
+                  <strong>Effort estimate:</strong> {item.effortEstimate}
+                </div>
+              )}
             </div>
+            <ReferencesBlock references={item.references} reference={item.reference} />
           </div>
-          {item.background && (
-            <div className="mb-3">
-              <p className="text-sm text-gray-400 mb-1">Background</p>
-              <p className="text-sm text-gray-300">{item.background}</p>
-            </div>
-          )}
-          <p className="text-gray-300 mb-3">{item.userValue}</p>
-          <div className="grid gap-3">
-            {item.technicalConsiderations && item.technicalConsiderations.length > 0 && (
-              <div>
-                <p className="text-sm text-gray-400 mb-1">Technical considerations:</p>
-                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
-                  {item.technicalConsiderations.map((point, idx) => (
-                    <li key={idx}>{point}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {item.successCriteria && item.successCriteria.length > 0 && (
-              <div>
-                <p className="text-sm text-gray-400 mb-1">Success criteria:</p>
-                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
-                  {item.successCriteria.map((criterion, idx) => (
-                    <li key={idx}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {item.openQuestions && item.openQuestions.length > 0 && (
-              <div>
-                <p className="text-sm text-gray-400 mb-1">Open questions:</p>
-                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
-                  {item.openQuestions.map((question, idx) => (
-                    <li key={idx}>{question}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-          <ReferencesBlock references={item.references} reference={item.reference} />
-        </div>
-      ));
-      break;
-    case 'technicalDebt':
-      content = (items as TechnicalDebtItem[]).map((item, index) => (
-        <div key={index} className="p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200">
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <h3 className="text-lg font-semibold text-white">{item.issue}</h3>
-              <p className="text-sm text-gray-300">{item.impact}</p>
-            </div>
-            <div className="flex flex-col items-end gap-2">
-              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('priority', item.priority)}`}>
-                {item.priority}
-              </span>
-              {renderToggle(index)}
-            </div>
-          </div>
-          {item.owners && item.owners.length > 0 && (
-            <div className="mb-3 text-sm text-gray-300">
-              <strong className="text-gray-200">Owners:</strong> {item.owners.join(', ')}
-            </div>
-          )}
-          <div className="grid gap-3">
-            {item.recommendedActions && item.recommendedActions.length > 0 && (
-              <div>
-                <p className="text-sm text-gray-400 mb-1">Recommended actions:</p>
-                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
-                  {item.recommendedActions.map((action, idx) => (
-                    <li key={idx}>{action}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {item.validationSteps && item.validationSteps.length > 0 && (
-              <div>
-                <p className="text-sm text-gray-400 mb-1">Validation steps:</p>
-                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
-                  {item.validationSteps.map((step, idx) => (
-                    <li key={idx}>{step}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {item.effortEstimate && (
-              <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
-                <strong>Effort:</strong> {item.effortEstimate}
-              </div>
-            )}
-          </div>
-          <ReferencesBlock references={item.references} reference={item.reference} />
-        </div>
-      ));
-      break;
-    case 'performance':
-      content = (items as PerformanceItem[]).map((item, index) => (
-        <div key={index} className="p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200">
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <h3 className="text-lg font-semibold text-white">{item.area}</h3>
-              <p className="text-sm text-gray-300">{item.problemStatement}</p>
-            </div>
-            <div className="flex flex-col items-end gap-2">
-              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('impact', item.expectedImpact)}`}>
-                {item.expectedImpact} Impact
-              </span>
-              {renderToggle(index)}
-            </div>
-          </div>
-          {item.owners && item.owners.length > 0 && (
-            <div className="mb-3 text-sm text-gray-300">
-              <strong className="text-gray-200">Owners:</strong> {item.owners.join(', ')}
-            </div>
-          )}
-          <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300 mb-3">
-            <strong>Recommendation:</strong> {item.recommendation}
-          </div>
-          <div className="grid gap-3">
-            {item.validationPlan && item.validationPlan.length > 0 && (
-              <div>
-                <p className="text-sm text-gray-400 mb-1">Validation plan:</p>
-                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
-                  {item.validationPlan.map((step, idx) => (
-                    <li key={idx}>{step}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {item.effortEstimate && (
-              <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
-                <strong>Effort estimate:</strong> {item.effortEstimate}
-              </div>
-            )}
-          </div>
-          <ReferencesBlock references={item.references} reference={item.reference} />
-        </div>
-      ));
+        );
+      });
       break;
     default:
       content = null;
   }
 
-  const showExclusionHint = items.length > 0 && selectedIndices.size === 0 && BRIEFCASE_SECTIONS.includes(section);
+  const showExclusionHint =
+    isBriefcaseSection && items.length > 0 && selectedIndices.size === 0;
 
   return (
     <>
@@ -1536,6 +1615,31 @@ function ReferencesBlock({
         ))}
       </ul>
     </div>
+  );
+}
+
+function BriefcaseIcon({ filled = false }: { filled?: boolean }) {
+  return (
+    <svg
+      className="w-4 h-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {filled && (
+        <path
+          d="M4.8 7.2h14.4A1.8 1.8 0 0 1 21 9v7.2a2.4 2.4 0 0 1-2.4 2.4H5.4A2.4 2.4 0 0 1 3 16.2V9c0-.994.806-1.8 1.8-1.8z"
+          fill="currentColor"
+          opacity={0.28}
+        />
+      )}
+      <path d="M8.4 7.2V5.7A1.2 1.2 0 0 1 9.6 4.5h4.8a1.2 1.2 0 0 1 1.2 1.2v1.5" />
+      <path d="M4.8 7.2h14.4A1.8 1.8 0 0 1 21 9v7.2a2.4 2.4 0 0 1-2.4 2.4H5.4A2.4 2.4 0 0 1 3 16.2V9c0-.994.806-1.8 1.8-1.8z" />
+      <path d="M9.6 12.6h4.8" />
+    </svg>
   );
 }
 
