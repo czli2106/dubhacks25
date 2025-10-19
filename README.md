@@ -11,12 +11,11 @@ A comprehensive AI-powered product management analysis tool that analyzes GitHub
 - **Deep Insights**: Comprehensive product management analysis
 - **GitHub Integration**: Direct links to original GitHub resources
 
-### **Backend (FastAPI)**
-- **Prompt Management**: Centralized AI prompt management system
-- **Admin Interface**: Web-based interface for managing prompts
-- **Database**: SQLite database with full CRUD operations
-- **API Documentation**: Auto-generated OpenAPI/Swagger docs
-- **Category Organization**: Organized prompts by analysis type
+### **Server (Next.js API Routes)**
+- **GitHub Aggregation**: Securely fetches commits, issues, PRs, and repo metadata via Octokit
+- **AI Prompting**: Maintains structured prompt templates used to guide the OpenAI analysis
+- **Secret Management**: Runs entirely server-side, so API keys stay off the client
+- **Resilient Defaults**: Graceful fallbacks if the OpenAI response cannot be parsed
 
 ### **AI Analysis Categories**
 1. **Product Roadmap** - Strategic roadmap recommendations
@@ -40,9 +39,9 @@ cd ai-pm
 
 The script will:
 - Check dependencies
-- Install all required packages
-- Create environment template
-- Start both backend and frontend
+- Install required packages
+- Create an environment template
+- Start the Next.js development server
 - Open the application
 
 ### **Option 2: Manual Setup**
@@ -52,13 +51,6 @@ The script will:
 **Frontend:**
 ```bash
 npm install
-```
-
-**Backend:**
-```bash
-cd backend
-pip install -r requirements.txt
-cd ..
 ```
 
 #### **2. Environment Setup**
@@ -71,24 +63,14 @@ GITHUB_TOKEN=your_github_token_here
 
 # OpenAI API Key for AI analysis
 OPENAI_API_KEY=your_openai_api_key_here
-
-# FastAPI Backend URL (optional)
-FASTAPI_BASE_URL=http://localhost:8000
 ```
 
 **Get API Keys:**
 - **GitHub Token**: [Create Personal Access Token](https://github.com/settings/tokens)
 - **OpenAI API Key**: [Get API Key](https://platform.openai.com/api-keys)
 
-#### **3. Start Services**
+#### **3. Start the App**
 
-**Terminal 1 - Backend:**
-```bash
-cd backend
-python start.py
-```
-
-**Terminal 2 - Frontend:**
 ```bash
 npm run dev
 ```
@@ -96,9 +78,7 @@ npm run dev
 ## 🌐 Access Points
 
 - **Main Application**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **Admin Interface**: http://localhost:8000/admin.html
-- **API Documentation**: http://localhost:8000/docs
+- **API Routes**: http://localhost:3000/api/*
 
 ## 📊 How It Works
 
@@ -109,38 +89,23 @@ npm run dev
 4. **Insights Display**: Comprehensive analysis with actionable recommendations
 
 ### **Technical Flow**
-1. **Frontend** → Sends repository URL to Next.js API
-2. **GitHub API** → Fetches repository data, commits, issues, PRs
-3. **FastAPI Backend** → Provides customizable AI prompts
-4. **OpenAI API** → Generates comprehensive analysis
-5. **Results** → Formatted insights with GitHub links
-
-## 🔧 Admin Features
-
-### **Prompt Management**
-- **View All Prompts**: See all analysis prompts with status
-- **Edit Prompts**: Modify prompt titles and content
-- **Activate/Deactivate**: Enable/disable prompts without deletion
-- **Real-time Stats**: Monitor prompt usage and updates
-
-### **Access Admin Interface**
-1. Go to http://localhost:8000/admin.html
-2. View all prompts organized by category
-3. Edit prompts by clicking the edit button
-4. Toggle prompt status (active/inactive)
-5. Monitor system statistics
+1. **Frontend** → Sends the repository URL to `/api/analyze/context` to gather commits/issues/PR data
+2. **Next.js API** → Aggregates GitHub context, stores it client-side, and redirects to the insights view
+3. **Frontend** → Sequentially calls `/api/analyze/section` for each insight category, streaming results into the UI
+4. **OpenAI API** → Returns JSON for each section following the enforced schema (including references and optional notes)
+5. **Frontend** → Renders each section as it arrives, showing notes when no recommendations are available
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Next.js       │    │   FastAPI       │    │   External      │
-│   Frontend      │◄──►│   Backend       │◄──►│   APIs          │
-│                 │    │                 │    │                 │
-│ • React UI      │    │ • Prompt Mgmt   │    │ • GitHub API    │
-│ • API Routes    │    │ • SQLite DB     │    │ • OpenAI API    │
-│ • Animations    │    │ • Admin UI      │    │                 │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+┌─────────────────┐    ┌─────────────────┐
+│   Next.js       │    │   External      │
+│   App & API     │◄──►│   APIs          │
+│                 │    │                 │
+│ • React UI      │    │ • GitHub API    │
+│ • API Routes    │    │ • OpenAI API    │
+│ • Prompt files  │    │                 │
+└─────────────────┘    └─────────────────┘
 ```
 
 ## 📁 Project Structure
@@ -152,12 +117,6 @@ ai-pm/
 │   ├── loading/           # Loading page
 │   ├── insights/          # Insights page
 │   └── page.tsx           # Main page
-├── backend/               # FastAPI backend
-│   ├── main.py           # Main FastAPI app
-│   ├── start.py          # Startup script
-│   ├── admin.html        # Admin interface
-│   ├── requirements.txt  # Python dependencies
-│   └── README.md         # Backend documentation
 ├── start-system.sh       # Automated startup script
 └── README.md             # This file
 ```
@@ -171,16 +130,6 @@ ai-pm/
 
 ## 🚀 Production Deployment
 
-### **Backend (FastAPI)**
-```bash
-# Use production database
-export DATABASE_URL="postgresql://user:pass@host:port/db"
-
-# Use production server
-gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
-```
-
-### **Frontend (Next.js)**
 ```bash
 # Build for production
 npm run build
@@ -192,19 +141,20 @@ npm start
 ## 🛠️ Development
 
 ### **Adding New Analysis Categories**
-1. Add new prompt to FastAPI backend
-2. Update frontend to display new category
-3. Restart services
+1. Add a new prompt file in the `prompts/` directory
+2. Register that file in `SECTION_PROMPT_FILES` inside `app/api/analyze/section/route.ts`
+3. Adjust the insights rendering in `app/insights/page.tsx`
+4. Restart the development server if it was already running
 
 ### **Customizing Prompts**
-- Use admin interface at http://localhost:8000/admin.html
-- No code changes required
-- Changes take effect immediately
+- Edit the corresponding text file in the `prompts/` directory
+- Redeploy or restart to load the updated templates
+- Ensure the JSON fields stay aligned with `SECTION_RESPONSE_SHAPES` (reference titles + URLs, optional notes, array fields, etc.)
 
 ### **API Integration**
-- Backend provides RESTful API
-- Frontend consumes API via fetch
-- OpenAPI documentation available
+- Next.js API routes expose the analysis endpoints
+- Frontend consumes those routes via the built-in fetch API
+- External integrations rely on GitHub and OpenAI services only
 
 ## 📝 Environment Variables
 
@@ -212,8 +162,6 @@ npm start
 |----------|-------------|----------|
 | `GITHUB_TOKEN` | GitHub Personal Access Token | Yes |
 | `OPENAI_API_KEY` | OpenAI API Key | Yes |
-| `FASTAPI_BASE_URL` | FastAPI Backend URL | No (defaults to localhost:8000) |
-| `DATABASE_URL` | Database connection string | No (defaults to SQLite) |
 
 ## 🤝 Contributing
 
@@ -234,8 +182,8 @@ If you encounter any issues:
 1. Check the console logs for errors
 2. Verify all environment variables are set
 3. Ensure all dependencies are installed
-4. Check that both services are running
-5. Review the API documentation at http://localhost:8000/docs
+4. Restart the development server if it crashed
+5. Confirm your GitHub and OpenAI credentials are valid
 
 ## 🎯 Roadmap
 

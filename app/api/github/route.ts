@@ -35,15 +35,24 @@ export async function POST(request: Request) {
     // Initialize Octokit with the user's token
     const octokit = new Octokit({ auth: token });
 
-    // Fetch the 50 most recent commits
-    const { data: commits } = await octokit.repos.listCommits({
-      owner,
-      repo,
-      per_page: 50,
-    });
+    const [commitsResponse, issues] = await Promise.all([
+      octokit.rest.pulls.list({
+        owner,
+        repo,
+        per_page: 50,
+        state: 'open',
+      }),
+      octokit.paginate(octokit.rest.issues.listForRepo, {
+        owner,
+        repo,
+        per_page: 100,
+        state: 'open',
+      }),
+    ]);
 
-    // Return the commit data
-    return NextResponse.json({ commits });
+    const commits = commitsResponse.data;
+
+    return NextResponse.json({ commits, issues });
 
   } catch (error) {
     console.error(error);

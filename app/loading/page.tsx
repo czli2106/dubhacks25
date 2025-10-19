@@ -20,7 +20,7 @@ export default function LoadingPage() {
   const searchParams = useSearchParams();
   const [commits, setCommits] = useState<Commit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [particles, setParticles] = useState<Array<{id: number, x: number, y: number, size: number, speed: number}>>([]);
 
@@ -65,8 +65,7 @@ export default function LoadingPage() {
 
     const loadDataAndAnalyze = async () => {
       try {
-        // First, get the commits
-        const commitsResponse = await fetch('/api/github', {
+        const contextResponse = await fetch('/api/analyze/context', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -74,44 +73,37 @@ export default function LoadingPage() {
           }),
         });
 
-        if (!commitsResponse.ok) {
-          throw new Error('Failed to fetch commits');
+        if (!contextResponse.ok) {
+          throw new Error('Failed to fetch repository context');
         }
 
-        const commitsData = await commitsResponse.json();
-        setCommits(commitsData.commits);
+        const contextData = await contextResponse.json();
+        setCommits(contextData.commits);
         setIsLoading(false);
-        setIsAnalyzing(true);
+        setIsRedirecting(true);
 
-        // Then, analyze with AI
-        const insightsResponse = await fetch('/api/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            repoUrl, 
-            commits: commitsData.commits
-          }),
-        });
-
-        if (!insightsResponse.ok) {
-          throw new Error('Failed to fetch insights');
+        try {
+          const storageKey = `analysis-context:${repoUrl}`;
+          sessionStorage.setItem(storageKey, JSON.stringify({
+            commits: contextData.commits,
+            analysisContext: contextData.analysisContext,
+            timestamp: Date.now()
+          }));
+        } catch (storageError) {
+          console.warn('Unable to persist analysis context to sessionStorage:', storageError);
         }
 
-        const insightsData = await insightsResponse.json();
-        
-        // Navigate to insights page with data
         const params = new URLSearchParams({
           repo: repoUrl,
           owner: owner,
-          repoName: repoName,
-          insights: JSON.stringify(insightsData.insights)
+          repoName: repoName
         });
-        
+
         window.location.href = `/insights?${params.toString()}`;
       } catch (err: any) {
         setError(err.message);
         setIsLoading(false);
-        setIsAnalyzing(false);
+        setIsRedirecting(false);
       }
     };
 
@@ -225,10 +217,10 @@ export default function LoadingPage() {
                 <div className="w-8 h-8 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
                 <span className="text-lg text-gray-300">Fetching repository data...</span>
               </div>
-            ) : isAnalyzing ? (
+            ) : isRedirecting ? (
               <div className="inline-flex items-center space-x-3">
                 <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
-                <span className="text-lg text-gray-300">AI is analyzing your repository...</span>
+                <span className="text-lg text-gray-300">Preparing insights...</span>
               </div>
             ) : null}
           </div>

@@ -1,0 +1,30 @@
+Prompt Title: Maintainability Audit for OSS Maintainers
+
+Prompt:
+
+You are a senior software architect advising a small-to-medium sized open-source project on reducing technical debt without stalling feature work. Assess the repository’s recent history and flag the most actionable cleanup efforts.
+
+Available inputs:
+- Repository metadata (mission, stack, activity)
+- Recent commit history (messages, authors, timestamps)
+- All open issues and pull requests with metadata and links
+
+Instructions:
+1. Determine the core architecture and maturity of the codebase from the metadata and languages used.
+2. Review recent commits for signs of rushed fixes, TODOs, or repeated churn in specific modules.
+3. Survey open issues/PRs for maintenance-related labels (refactor, cleanup, documentation, tests) and neglected bug reports. Only cite evidence that truly exists.
+4. Produce a prioritized list of debt items that deliver near-term stability or developer experience gains.
+5. Copy the exact GitHub title of the supporting issue/PR/commit into `reference.title`, and provide the canonical URL in `reference.url`.
+6. Provide effort estimates and sequencing guidance to help teams slot work into future iterations.
+7. If no actionable debt is evident, return an empty `items` array and set `note` to explain why.
+
+Output Format (JSON fields inside each `items` element):
+- `issue`: Name of the debt or component.
+- `impact`: Why it matters for stability or velocity.
+- `priority`: `High` | `Medium` | `Low`.
+- `recommendedActions`: Array of concrete steps or sub-tasks.
+- `effortEstimate`: Rough time investment (e.g., `1-2 days`, `1 sprint`).
+- `reference`: Object with `title` (exact GitHub title) and `url` (link to the supporting artifact).
+- Top-level `note`: String (or `null`) that justifies why `items` is empty when no debt items are recommended.
+
+Return valid JSON only.

@@ -24,27 +24,11 @@ if ! command_exists node; then
     exit 1
 fi
 
-if ! command_exists python3; then
-    echo "❌ Python 3 is not installed. Please install Python 3 first."
-    exit 1
-fi
-
-if ! command_exists pip; then
-    echo "❌ pip is not installed. Please install pip first."
-    exit 1
-fi
-
 echo "✅ Dependencies check passed"
 
 # Install Next.js dependencies
 echo "📦 Installing Next.js dependencies..."
 npm install
-
-# Install Python dependencies
-echo "📦 Installing Python dependencies..."
-cd backend
-pip install -r requirements.txt
-cd ..
 
 # Check environment variables
 echo "🔧 Checking environment variables..."
@@ -58,8 +42,6 @@ GITHUB_TOKEN=your_github_token_here
 # OpenAI API Key for AI analysis
 OPENAI_API_KEY=your_openai_api_key_here
 
-# FastAPI Backend URL (optional, defaults to localhost:8000)
-FASTAPI_BASE_URL=http://localhost:8000
 EOF
     echo "📝 Please edit .env.local and add your API keys"
     echo "   - Get GitHub token: https://github.com/settings/tokens"
@@ -67,28 +49,6 @@ EOF
     echo ""
     echo "Press Enter when you've added your API keys..."
     read
-fi
-
-# Start FastAPI backend
-echo "🔧 Starting FastAPI backend..."
-cd backend
-python start.py &
-BACKEND_PID=$!
-cd ..
-
-# Wait for backend to start
-echo "⏳ Waiting for backend to start..."
-sleep 5
-
-# Check if backend is running
-if curl -s http://localhost:8000/health > /dev/null; then
-    echo "✅ Backend is running at http://localhost:8000"
-    echo "   Admin Interface: http://localhost:8000/admin.html"
-    echo "   API Docs: http://localhost:8000/docs"
-else
-    echo "❌ Backend failed to start. Check the logs above."
-    kill $BACKEND_PID 2>/dev/null
-    exit 1
 fi
 
 # Start Next.js frontend
@@ -105,7 +65,6 @@ if curl -s http://localhost:3000 > /dev/null; then
     echo "✅ Frontend is running at http://localhost:3000"
 else
     echo "❌ Frontend failed to start. Check the logs above."
-    kill $BACKEND_PID 2>/dev/null
     kill $FRONTEND_PID 2>/dev/null
     exit 1
 fi
@@ -114,9 +73,6 @@ echo ""
 echo "🎉 AI PM System is now running!"
 echo "================================"
 echo "Frontend: http://localhost:3000"
-echo "Backend:  http://localhost:8000"
-echo "Admin:    http://localhost:8000/admin.html"
-echo "API Docs: http://localhost:8000/docs"
 echo ""
 echo "Press Ctrl+C to stop all services"
 
@@ -124,7 +80,6 @@ echo "Press Ctrl+C to stop all services"
 cleanup() {
     echo ""
     echo "🛑 Stopping services..."
-    kill $BACKEND_PID 2>/dev/null
     kill $FRONTEND_PID 2>/dev/null
     echo "✅ All services stopped"
     exit 0

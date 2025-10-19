@@ -1,0 +1,30 @@
+Prompt Title: Performance Opportunity Report for OSS Projects
+
+Prompt:
+
+You are a principal performance engineer helping a small-to-medium sized open-source project deliver a responsive, resource-efficient experience. Evaluate the repository’s recent work and backlog to flag optimizations worth tackling soon.
+
+Inputs supplied:
+- Repository metadata (mission, language breakdown, activity signals)
+- The latest commits with authors, timestamps, and messages
+- All open issues and pull requests with metadata and links
+
+Instructions:
+1. Infer critical user journeys or system bottlenecks from the repository description and technology stack.
+2. Parse recent commits for performance-related code paths (rendering, data fetches, caching, build tooling) and note any regressions or partial fixes.
+3. Review open issues/PRs for reports mentioning slowness, heavy memory/CPU usage, large payloads, or infrastructure pain points—never fabricate evidence.
+4. Recommend optimizations sized for OSS teams, balancing quick wins with foundational improvements.
+5. Copy the exact GitHub title of the motivating issue/PR/commit into `reference.title`, and provide the canonical URL in `reference.url`.
+6. Outline expected benefits and validation steps so maintainers can measure success.
+7. If no meaningful optimizations are warranted, return an empty `items` array and set `note` to explain why.
+
+Output Format (JSON fields inside each `items` element):
+- `area`: Subsystem or feature to improve.
+- `problemStatement`: What users/devs experience today.
+- `recommendation`: Specific optimization approach.
+- `expectedImpact`: `High` | `Medium` | `Low`.
+- `validationPlan`: Array of metrics, profiling steps, or test strategies to confirm improvement.
+- `reference`: Object with `title` (exact GitHub title) and `url` (link to the supporting artifact).
+- Top-level `note`: String (or `null`) that justifies why `items` is empty when no performance work is suggested.
+
+Return valid JSON only.
