@@ -13,9 +13,9 @@ Instructions:
 1. Review the repository description and language mix to understand the project’s scope and technical foundation.
 2. Skim recent commits to spot emerging themes (e.g., new features, refactors, bug fixes) and identify momentum or gaps.
 3. Examine open issues and PRs to uncover user needs, outstanding bugs, or proposed features that need prioritization.
-4. Propose roadmap initiatives that balance impact, effort, and the project’s maturity stage. Lean toward clarity and feasibility for community contributors.
-5. Tie each initiative to specific evidence (commit, issue, or PR) so readers can validate context quickly—never fabricate references.
-6. Copy the exact GitHub title of the supporting issue/PR/commit into `reference.title`, and provide the canonical URL in `reference.url`.
+4. Recommend quarter-scale (6–12 week) initiatives that align with the project’s mission and keep contributors focused. These should feel like medium-to-large epics rather than one-off tasks.
+5. Tie each initiative to multiple pieces of supporting evidence (commits, issues, PRs) wherever possible—never fabricate references.
+6. Copy the exact GitHub title of every supporting artifact into `references[].title`, and provide the canonical URL in `references[].url`.
 7. If there is no credible evidence to support an initiative, return an empty `items` array and set `note` to explain why no roadmap work is recommended right now.
 8. Highlight assumptions, dependencies, or prerequisite tasks so maintainers can plan in iterations.
 
@@ -23,9 +23,9 @@ Output Format (JSON fields inside each `items` element):
 - `title`: Concise initiative name.
 - `outcome`: What success looks like for maintainers/users.
 - `priority`: `High` | `Medium` | `Low`.
-- `estimatedEffort`: Rough time investment (e.g., `1 sprint`, `2-3 weeks`).
+- `estimatedEffort`: Rough time investment (e.g., `One quarter`, `6-8 weeks`).
 - `keyTasks`: Array of concrete steps or sub-issues (strings).
-- `reference`: Object with `title` (exact GitHub title) and `url` (link to the supporting artifact).
+- `references`: Array of objects, each with `title` (exact GitHub title) and `url` (link to the supporting artifact).
 - Top-level `note`: String (or `null`) that briefly states why there are no initiatives when `items` is empty.
 
 Return valid JSON only.

@@ -25,6 +25,7 @@ type RoadmapItem = {
   priority: string;
   estimatedEffort?: string;
   keyTasks?: string[];
+  references?: ReferenceInfo[];
   reference?: ReferenceInfo;
 };
 
@@ -272,17 +273,25 @@ export default function InsightsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analysisContext, setAnalysisContext] = useState<AnalysisContext | null>(null);
-  const [sectionData, setSectionData] = useState<SectionData>(INITIAL_SECTION_DATA);
-  const [sectionStatus, setSectionStatus] = useState<SectionStatusMap>(INITIAL_STATUS);
-  const [sectionErrors, setSectionErrors] = useState<SectionErrors>(INITIAL_ERRORS);
-  const [sectionNotes, setSectionNotes] = useState<SectionNotes>({
-    roadmap: null,
-    vulnerabilities: null,
-    teamAssignments: null,
-    newFeatures: null,
-    technicalDebt: null,
-    performance: null
-  });
+const [sectionData, setSectionData] = useState<SectionData>(INITIAL_SECTION_DATA);
+const [sectionStatus, setSectionStatus] = useState<SectionStatusMap>(INITIAL_STATUS);
+const [sectionErrors, setSectionErrors] = useState<SectionErrors>(INITIAL_ERRORS);
+const [sectionNotes, setSectionNotes] = useState<SectionNotes>({
+  roadmap: null,
+  vulnerabilities: null,
+  teamAssignments: null,
+  newFeatures: null,
+  technicalDebt: null,
+  performance: null
+});
+const [collapsedSections, setCollapsedSections] = useState<Record<SectionKey, boolean>>({
+  roadmap: false,
+  vulnerabilities: false,
+  teamAssignments: false,
+  newFeatures: false,
+  technicalDebt: false,
+  performance: false
+});
 
   // Floating particles animation
   useEffect(() => {
@@ -356,6 +365,14 @@ export default function InsightsPage() {
       newFeatures: null,
       technicalDebt: null,
       performance: null
+    });
+    setCollapsedSections({
+      roadmap: false,
+      vulnerabilities: false,
+      teamAssignments: false,
+      newFeatures: false,
+      technicalDebt: false,
+      performance: false
     });
 
     const storageKey = `analysis-context:${repoUrl}`;
@@ -455,6 +472,10 @@ export default function InsightsPage() {
     };
   }, [repoUrl, owner, repoName]);
 
+  const toggleSection = (key: SectionKey) => {
+    setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
@@ -515,7 +536,7 @@ export default function InsightsPage() {
       </div>
 
       <main className="relative z-10 px-4 py-8">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-screen-2xl mx-auto">
           {/* Header */}
           <div className="text-center mb-8">
             <div className="flex items-center justify-center space-x-4 mb-4">
@@ -563,54 +584,32 @@ export default function InsightsPage() {
             </div>
           )}
 
-          <div className="grid gap-8 mb-12">
-            {/* Product Roadmap */}
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8">
-              <SectionHeader config={SECTION_RENDER_CONFIG.roadmap} />
-              <div className="grid gap-4">
-                {renderSectionContent('roadmap', sectionStatus, sectionData, sectionErrors, sectionNotes)}
-              </div>
-            </div>
-
-            {/* Vulnerabilities */}
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8">
-              <SectionHeader config={SECTION_RENDER_CONFIG.vulnerabilities} />
-              <div className="grid gap-4">
-                {renderSectionContent('vulnerabilities', sectionStatus, sectionData, sectionErrors, sectionNotes)}
-              </div>
-            </div>
-
-            {/* Team Assignments */}
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8">
-              <SectionHeader config={SECTION_RENDER_CONFIG.teamAssignments} />
-              <div className="grid gap-4">
-                {renderSectionContent('teamAssignments', sectionStatus, sectionData, sectionErrors, sectionNotes)}
-              </div>
-            </div>
-
-            {/* New Features */}
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8">
-              <SectionHeader config={SECTION_RENDER_CONFIG.newFeatures} />
-              <div className="grid gap-4">
-                {renderSectionContent('newFeatures', sectionStatus, sectionData, sectionErrors, sectionNotes)}
-              </div>
-            </div>
-
-            {/* Technical Debt */}
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8">
-              <SectionHeader config={SECTION_RENDER_CONFIG.technicalDebt} />
-              <div className="grid gap-4">
-                {renderSectionContent('technicalDebt', sectionStatus, sectionData, sectionErrors, sectionNotes)}
-              </div>
-            </div>
-
-            {/* Performance */}
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8">
-              <SectionHeader config={SECTION_RENDER_CONFIG.performance} />
-              <div className="grid gap-4">
-                {renderSectionContent('performance', sectionStatus, sectionData, sectionErrors, sectionNotes)}
-              </div>
-            </div>
+          <div className="space-y-8 md:space-y-0 md:columns-2 md:gap-8 mb-12">
+            {SECTION_ORDER.map((key) => {
+              const config = SECTION_RENDER_CONFIG[key];
+              const collapsed = collapsedSections[key];
+              return (
+                <div
+                  key={key}
+                  className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 flex flex-col break-inside-avoid md:mb-8 shadow-sm transition-shadow hover:shadow-lg"
+                >
+                  <SectionHeader
+                    config={config}
+                    collapsed={collapsed}
+                    onToggle={() => toggleSection(key)}
+                  />
+                  <div
+                    className={`grid gap-4 overflow-hidden transition-all duration-300 ease-in-out ${
+                      collapsed
+                        ? 'max-h-0 opacity-0 -translate-y-2 pointer-events-none'
+                        : 'max-h-[4000px] opacity-100 translate-y-0'
+                    }`}
+                  >
+                    {renderSectionContent(key, sectionStatus, sectionData, sectionErrors, sectionNotes)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </main>
@@ -620,18 +619,37 @@ export default function InsightsPage() {
 
 type SectionHeaderProps = {
   config: SectionRenderConfig;
+  collapsed: boolean;
+  onToggle: () => void;
 };
 
-function SectionHeader({ config }: SectionHeaderProps) {
+function SectionHeader({ config, collapsed, onToggle }: SectionHeaderProps) {
   return (
-    <div className="flex items-center space-x-4 mb-6">
-      <div className={`w-12 h-12 ${config.iconBg} rounded-xl flex items-center justify-center`}>
-        {config.icon}
+    <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center space-x-4">
+        <div className={`w-12 h-12 ${config.iconBg} rounded-xl flex items-center justify-center`}>
+          {config.icon}
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-white">{config.title}</h2>
+          <p className="text-gray-400">{config.description}</p>
+        </div>
       </div>
-      <div>
-        <h2 className="text-2xl font-bold text-white">{config.title}</h2>
-        <p className="text-gray-400">{config.description}</p>
-      </div>
+      <button
+        onClick={onToggle}
+        className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+        aria-expanded={!collapsed}
+        aria-label={collapsed ? `Expand ${config.title}` : `Collapse ${config.title}`}
+      >
+        <svg
+          className={`w-5 h-5 text-white transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 9l7 7 7-7" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -712,7 +730,20 @@ function renderSectionContent(
               </ul>
             </div>
           )}
-          <ReferenceLink reference={item.reference} />
+          {Array.isArray(item.references) && item.references.length > 0 ? (
+            <div className="mt-3">
+              <p className="text-sm text-gray-400 mb-1">Supporting references:</p>
+              <ul className="space-y-1 text-sm">
+                {item.references.map((ref, idx) => (
+                  <li key={idx}>
+                    <ReferenceAnchor reference={ref} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <ReferenceLink reference={item.reference} />
+          )}
         </div>
       ));
       break;
@@ -858,26 +889,36 @@ function renderSectionContent(
   );
 }
 
-function ReferenceLink({ reference }: { reference?: ReferenceInfo | null }) {
+function ReferenceAnchor({ reference, label }: { reference?: ReferenceInfo | null; label?: string }) {
   if (!reference?.url) {
     return null;
   }
 
-  const label = reference.title && reference.title.trim().length > 0 ? reference.title.trim() : 'View supporting context';
+  const displayLabel = label ?? (reference.title && reference.title.trim().length > 0 ? reference.title.trim() : 'View supporting context');
+
+  return (
+    <a
+      href={reference.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center space-x-2 text-sm text-purple-300 hover:text-purple-200 transition-colors"
+    >
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+      </svg>
+      <span>{displayLabel}</span>
+    </a>
+  );
+}
+
+function ReferenceLink({ reference, label }: { reference?: ReferenceInfo | null; label?: string }) {
+  if (!reference?.url) {
+    return null;
+  }
 
   return (
     <div className="mt-3">
-      <a
-        href={reference.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center space-x-2 text-sm text-purple-300 hover:text-purple-200 transition-colors"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-        </svg>
-        <span>{label}</span>
-      </a>
+      <ReferenceAnchor reference={reference} label={label} />
     </div>
   );
 }

@@ -74,10 +74,10 @@ const SECTION_RESPONSE_SHAPES: Record<SectionKey, string> = {
       "priority": "High" | "Medium" | "Low",
       "estimatedEffort": string,
       "keyTasks": string[],
-      "reference": {
+      "references": Array<{
         "title": string,
         "url": string
-      }
+      }>
     }
   ],
   "note": string | null
@@ -291,7 +291,8 @@ export async function POST(request: Request) {
     const strictRules = `
 STRICT RULES
 - Base every insight on the commits, issues, or pull requests contained in the context summary. Never invent artifacts.
-- For each item, populate reference.title with the exact GitHub title (issue, PR, or commit message first line) and reference.url with its canonical URL.
+- Populate reference metadata with the exact GitHub title (issue, PR, or commit message first line) and its canonical URL.
+- Use the \`references\` array when the schema expects multiple supporting artifacts (e.g., roadmap); use the single \`reference\` object for sections that expect only one.
 - If you cannot justify an item with real evidence, omit it.
 - When there are no valid recommendations, return "items": [] and set "note" to a short sentence explaining why no action is needed.
 - Fields such as keyTasks, successCriteria, recommendedActions, and validationPlan must be arrays of strings (use [] when not applicable). Set supportPlan to null when no onboarding help is required.
@@ -334,7 +335,7 @@ ${expectedShape}`;
         ],
         text: {
           format: {
-          type: 'json_object'
+            type: 'json_object'
           }
         },
         max_output_tokens: 1500,
@@ -374,27 +375,46 @@ ${expectedShape}`;
       );
     }
 
+    const normalizeReference = (ref: any) => {
+      if (!ref) {
+        return null;
+      }
+
+      const rawTitle = typeof ref === 'string' ? ref : ref.title;
+      const title = rawTitle?.trim();
+      if (!title) {
+        return null;
+      }
+
+      const canonical = referenceIndex.get(title) ?? referenceIndexLower.get(title.toLowerCase());
+      if (canonical) {
+        return { title: canonical.title, url: canonical.url };
+      }
+
+      const url = typeof ref === 'string' ? undefined : ref.url;
+      if (!url) {
+        return null;
+      }
+
+      return { title, url };
+    };
+
     if (Array.isArray(parsed.items)) {
       parsed.items = parsed.items.map((item: any) => {
         if (item && typeof item === 'object') {
-          const refTitle = item.reference?.title?.trim();
-          if (refTitle) {
-            const canonical = referenceIndex.get(refTitle) ?? referenceIndexLower.get(refTitle.toLowerCase());
-            if (canonical) {
-              item.reference = {
-                title: canonical.title,
-                url: canonical.url
-              };
-            } else if (item.reference?.url) {
-              item.reference = {
-                title: refTitle,
-                url: item.reference.url
-              };
+          if (Array.isArray(item.references)) {
+            const normalizedRefs = item.references
+              .map((ref: any) => normalizeReference(ref))
+              .filter((ref): ref is { title: string; url: string } => Boolean(ref && ref.url));
+            item.references = normalizedRefs;
+          }
+
+          if (item.reference) {
+            const normalized = normalizeReference(item.reference);
+            if (normalized) {
+              item.reference = normalized;
             } else {
-              item.reference = {
-                title: refTitle,
-                url: ''
-              };
+              delete item.reference;
             }
           }
         }
