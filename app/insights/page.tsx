@@ -217,7 +217,7 @@ const SECTION_RENDER_CONFIG: Record<SectionKey, SectionRenderConfig> = {
   },
   newFeatures: {
     title: 'Suggested New Features',
-    description: 'Innovative features to enhance your product',
+    description: 'High-impact additions for user value',
     iconBg: 'bg-gradient-to-r from-blue-500 to-cyan-500',
     icon: (
       <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -528,7 +528,7 @@ export default function InsightsPage() {
                 </svg>
               </button>
               <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-purple-200 to-blue-200 bg-clip-text text-transparent">
-                AI Product Insights
+                OpenCompass Insights
               </h1>
             </div>
             <div className="flex items-center justify-center space-x-2 text-gray-300">

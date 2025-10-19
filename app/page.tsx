@@ -173,13 +173,13 @@ export default function HomePage() {
           <div className="text-center mb-12 animate-fade-in-up">
             <div className="relative inline-block mb-6">
               <h1 className="text-6xl font-bold bg-gradient-to-r from-white via-purple-200 to-blue-200 bg-clip-text text-transparent mb-4 relative">
-                GitFlow
+                OpenCompass
                 <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
               </h1>
               <div className="absolute -top-2 -right-2 w-4 h-4 bg-purple-400 rounded-full animate-ping"></div>
             </div>
             <p className="text-xl text-gray-300 max-w-2xl mx-auto leading-relaxed">
-              Discover the pulse of any GitHub repository through its most recent commits
+              Find direction in community projects with AI-powered analysis of GitHub repositories.
             </p>
             <div className="flex items-center justify-center mt-6 space-x-2 text-sm text-gray-400">
               <div className="flex items-center space-x-1">

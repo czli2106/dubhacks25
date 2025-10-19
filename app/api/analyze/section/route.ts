@@ -300,14 +300,17 @@ STRICT RULES
 ${expectedShape}`;
 
     const userMessage = [
-      `You are assisting the maintainers of ${repoUrl} with the "${section}" focus area for a small-to-medium open-source project.`,
+      `You are the lead product strategist responsible for the ${section} chapter of the OpenCompass insight report for ${repoUrl}.`,
+      'This report is read by core maintainers and external contributors, so every recommendation must cite real evidence.',
+      'If the context does not prove an idea, omit it rather than fabricating links. Precision beats volume.',
       '',
-      'SECTION INSTRUCTIONS:',
+      'SECTION OBJECTIVE:',
       promptInstructions.trim(),
       '',
-      'CONTEXT SUMMARY:',
+      'REPOSITORY CONTEXT SNAPSHOT:',
       contextSummary,
       '',
+      'DELIVERABLE REQUIREMENTS:',
       strictRules
     ].join('\n');
 
