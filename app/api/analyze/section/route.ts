@@ -72,8 +72,10 @@ const SECTION_RESPONSE_SHAPES: Record<SectionKey, string> = {
       "title": string,
       "outcome": string,
       "priority": "High" | "Medium" | "Low",
+      "owners": string[],
       "estimatedEffort": string,
       "keyTasks": string[],
+      "successCriteria": string[],
       "references": Array<{
         "title": string,
         "url": string
@@ -89,10 +91,13 @@ const SECTION_RESPONSE_SHAPES: Record<SectionKey, string> = {
       "description": string,
       "severity": "Critical" | "High" | "Medium" | "Low",
       "recommendation": string,
-      "reference": {
+      "owners": string[],
+      "effortEstimate": string,
+      "validationSteps": string[],
+      "references": Array<{
         "title": string,
         "url": string
-      }
+      }>
     }
   ],
   "note": string | null
@@ -116,14 +121,18 @@ const SECTION_RESPONSE_SHAPES: Record<SectionKey, string> = {
   "items": [
     {
       "title": string,
+      "background": string,
       "userValue": string,
       "impact": "High" | "Medium" | "Low",
       "complexity": "Simple" | "Medium" | "Complex",
+      "owners": string[],
+      "technicalConsiderations": string[],
       "successCriteria": string[],
-      "reference": {
+      "openQuestions": string[],
+      "references": Array<{
         "title": string,
         "url": string
-      }
+      }>
     }
   ],
   "note": string | null
@@ -136,10 +145,12 @@ const SECTION_RESPONSE_SHAPES: Record<SectionKey, string> = {
       "priority": "High" | "Medium" | "Low",
       "recommendedActions": string[],
       "effortEstimate": string,
-      "reference": {
+      "owners": string[],
+      "validationSteps": string[],
+      "references": Array<{
         "title": string,
         "url": string
-      }
+      }>
     }
   ],
   "note": string | null
@@ -151,11 +162,13 @@ const SECTION_RESPONSE_SHAPES: Record<SectionKey, string> = {
       "problemStatement": string,
       "recommendation": string,
       "expectedImpact": "High" | "Medium" | "Low",
+      "owners": string[],
+      "effortEstimate": string,
       "validationPlan": string[],
-      "reference": {
+      "references": Array<{
         "title": string,
         "url": string
-      }
+      }>
     }
   ],
   "note": string | null
@@ -295,7 +308,8 @@ STRICT RULES
 - Use the \`references\` array when the schema expects multiple supporting artifacts (e.g., roadmap); use the single \`reference\` object for sections that expect only one.
 - If you cannot justify an item with real evidence, omit it.
 - When there are no valid recommendations, return "items": [] and set "note" to a short sentence explaining why no action is needed.
-- Fields such as keyTasks, successCriteria, recommendedActions, and validationPlan must be arrays of strings (use [] when not applicable). Set supportPlan to null when no onboarding help is required.
+- Fields such as keyTasks, successCriteria, technicalConsiderations, openQuestions, recommendedActions, validationPlan, validationSteps, and owners must be arrays of strings (use [] when not applicable). Set supportPlan to null when no onboarding help is required.
+- Owners must reference real commit authors, issue assignees, or maintainer roles found in the context summary. If none apply, use an empty array.
 - Output JSON only. Do not include prose outside the JSON object.
 - Match the following TypeScript shape exactly:
 ${expectedShape}`;
@@ -399,6 +413,18 @@ ${expectedShape}`;
       return { title, url };
     };
 
+    const ensureStringArray = (value: unknown): string[] => {
+      if (!Array.isArray(value)) {
+        if (typeof value === 'string' && value.trim().length > 0) {
+          return [value.trim()];
+        }
+        return [];
+      }
+      return value
+        .map((entry) => (typeof entry === 'string' ? entry.trim() : null))
+        .filter((entry): entry is string => Boolean(entry && entry.length));
+    };
+
     if (Array.isArray(parsed.items)) {
       parsed.items = parsed.items.map((item: any) => {
         if (item && typeof item === 'object') {
@@ -417,6 +443,15 @@ ${expectedShape}`;
               delete item.reference;
             }
           }
+
+          item.keyTasks = ensureStringArray(item.keyTasks);
+          item.successCriteria = ensureStringArray(item.successCriteria);
+          item.technicalConsiderations = ensureStringArray(item.technicalConsiderations);
+          item.openQuestions = ensureStringArray(item.openQuestions);
+          item.recommendedActions = ensureStringArray(item.recommendedActions);
+          item.validationPlan = ensureStringArray(item.validationPlan);
+          item.validationSteps = ensureStringArray(item.validationSteps);
+          item.owners = ensureStringArray(item.owners);
         }
         return item;
       });

@@ -4,6 +4,22 @@
 import { useEffect, useState, ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 
+declare global {
+  interface Window {
+    JSZip?: JSZipFactory;
+  }
+}
+
+type JSZipInstance = {
+  file: (name: string, data: string) => void;
+  folder: (name: string) => JSZipInstance;
+  generateAsync: (options: { type: 'blob' }) => Promise<Blob>;
+};
+
+type JSZipFactory = {
+  new (): JSZipInstance;
+};
+
 type SectionKey =
   | 'roadmap'
   | 'vulnerabilities'
@@ -23,8 +39,10 @@ type RoadmapItem = {
   title: string;
   outcome: string;
   priority: string;
+  owners?: string[];
   estimatedEffort?: string;
   keyTasks?: string[];
+  successCriteria?: string[];
   references?: ReferenceInfo[];
   reference?: ReferenceInfo;
 };
@@ -34,6 +52,10 @@ type VulnerabilityItem = {
   description: string;
   severity: string;
   recommendation?: string;
+  owners?: string[];
+  effortEstimate?: string;
+  validationSteps?: string[];
+  references?: ReferenceInfo[];
   reference?: ReferenceInfo;
 };
 
@@ -47,10 +69,15 @@ type AssignmentItem = {
 
 type FeatureItem = {
   title: string;
+  background?: string;
   userValue: string;
   impact: string;
   complexity: string;
+  owners?: string[];
   successCriteria?: string[];
+  technicalConsiderations?: string[];
+  openQuestions?: string[];
+  references?: ReferenceInfo[];
   reference?: ReferenceInfo;
 };
 
@@ -60,6 +87,9 @@ type TechnicalDebtItem = {
   priority: string;
   recommendedActions?: string[];
   effortEstimate?: string;
+  owners?: string[];
+  validationSteps?: string[];
+  references?: ReferenceInfo[];
   reference?: ReferenceInfo;
 };
 
@@ -69,6 +99,9 @@ type PerformanceItem = {
   recommendation: string;
   expectedImpact: string;
   validationPlan?: string[];
+  effortEstimate?: string;
+  owners?: string[];
+  references?: ReferenceInfo[];
   reference?: ReferenceInfo;
 };
 
@@ -128,6 +161,14 @@ const SECTION_ORDER: SectionKey[] = [
   'newFeatures',
   'technicalDebt',
   'performance'
+];
+
+const BRIEFCASE_SECTIONS: SectionKey[] = [
+  'roadmap',
+  'newFeatures',
+  'technicalDebt',
+  'performance',
+  'vulnerabilities'
 ];
 
 const INITIAL_SECTION_DATA: SectionData = {
@@ -273,25 +314,41 @@ export default function InsightsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analysisContext, setAnalysisContext] = useState<AnalysisContext | null>(null);
-const [sectionData, setSectionData] = useState<SectionData>(INITIAL_SECTION_DATA);
-const [sectionStatus, setSectionStatus] = useState<SectionStatusMap>(INITIAL_STATUS);
-const [sectionErrors, setSectionErrors] = useState<SectionErrors>(INITIAL_ERRORS);
-const [sectionNotes, setSectionNotes] = useState<SectionNotes>({
-  roadmap: null,
-  vulnerabilities: null,
-  teamAssignments: null,
-  newFeatures: null,
-  technicalDebt: null,
-  performance: null
-});
-const [collapsedSections, setCollapsedSections] = useState<Record<SectionKey, boolean>>({
-  roadmap: false,
-  vulnerabilities: false,
-  teamAssignments: false,
-  newFeatures: false,
-  technicalDebt: false,
-  performance: false
-});
+  const [sectionData, setSectionData] = useState<SectionData>(INITIAL_SECTION_DATA);
+  const [sectionStatus, setSectionStatus] = useState<SectionStatusMap>(INITIAL_STATUS);
+  const [sectionErrors, setSectionErrors] = useState<SectionErrors>(INITIAL_ERRORS);
+  const [sectionNotes, setSectionNotes] = useState<SectionNotes>({
+    roadmap: null,
+    vulnerabilities: null,
+    teamAssignments: null,
+    newFeatures: null,
+    technicalDebt: null,
+    performance: null
+  });
+  const [collapsedSections, setCollapsedSections] = useState<Record<SectionKey, boolean>>({
+    roadmap: false,
+    vulnerabilities: false,
+    teamAssignments: false,
+    newFeatures: false,
+    technicalDebt: false,
+    performance: false
+  });
+  const [isGeneratingBriefcase, setIsGeneratingBriefcase] = useState(false);
+  const [briefcaseError, setBriefcaseError] = useState<string | null>(null);
+  const [briefcaseSuccess, setBriefcaseSuccess] = useState<string | null>(null);
+  const [briefcaseQuarter, setBriefcaseQuarter] = useState<'current' | 'next'>('current');
+  const [briefcaseSelections, setBriefcaseSelections] = useState<Record<SectionKey, number[]>>({
+    roadmap: [],
+    vulnerabilities: [],
+    teamAssignments: [],
+    newFeatures: [],
+    technicalDebt: [],
+    performance: []
+  });
+  const [briefcaseFiles, setBriefcaseFiles] = useState<Array<{ name: string; content: string }>>([]);
+  const [briefcaseMeta, setBriefcaseMeta] = useState<{ generatedAt: string; quarter: 'current' | 'next'; repoLabel?: string | null } | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [activePreviewFile, setActivePreviewFile] = useState<string | null>(null);
 
   // Floating particles animation
   useEffect(() => {
@@ -442,9 +499,14 @@ const [collapsedSections, setCollapsedSections] = useState<Record<SectionKey, bo
             break;
           }
 
+          const items = Array.isArray(data.items) ? data.items : [];
           setSectionData((prev) => ({
             ...prev,
-            [section]: Array.isArray(data.items) ? data.items : []
+            [section]: items
+          }));
+          setBriefcaseSelections((prev) => ({
+            ...prev,
+            [section]: items.map((_, index) => index)
           }));
           setSectionStatus((prev) => ({ ...prev, [section]: 'success' }));
           setSectionNotes((prev) => ({
@@ -472,9 +534,200 @@ const [collapsedSections, setCollapsedSections] = useState<Record<SectionKey, bo
     };
   }, [repoUrl, owner, repoName]);
 
+  useEffect(() => {
+    if (!repoUrl || typeof window === 'undefined') {
+      return;
+    }
+    try {
+      sessionStorage.setItem(
+        `analysis-sections:${repoUrl}`,
+        JSON.stringify({ sections: sectionData, updatedAt: Date.now() })
+      );
+    } catch (storageError) {
+      console.error('Failed to cache section data:', storageError);
+    }
+  }, [repoUrl, sectionData]);
+
   const toggleSection = (key: SectionKey) => {
     setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  const toggleBriefcaseItem = (section: SectionKey, index: number) => {
+    setBriefcaseSelections((prev) => {
+      const current = new Set(prev[section] ?? []);
+      if (current.has(index)) {
+        current.delete(index);
+      } else {
+        current.add(index);
+      }
+      return {
+        ...prev,
+        [section]: Array.from(current).sort((a, b) => a - b)
+      };
+    });
+  };
+
+  const includeAllInSection = (section: SectionKey, total: number) => {
+    setBriefcaseSelections((prev) => ({
+      ...prev,
+      [section]: Array.from({ length: total }, (_, index) => index)
+    }));
+  };
+
+  const loadJSZip = () =>
+    new Promise<JSZipFactory>((resolve, reject) => {
+      if (typeof window === 'undefined') {
+        reject(new Error('JSZip requires a browser environment'));
+        return;
+      }
+      if (window.JSZip) {
+        resolve(window.JSZip);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+      script.async = true;
+      script.onload = () => {
+        if (window.JSZip) {
+          resolve(window.JSZip);
+        } else {
+          reject(new Error('Failed to load JSZip'));
+        }
+      };
+      script.onerror = () => reject(new Error('Failed to load JSZip script'));
+      document.body.appendChild(script);
+    });
+
+  const handleGenerateBriefcase = async () => {
+    if (!repoUrl || !analysisContext) {
+      setBriefcaseError('Missing repository context. Please re-run the analysis.');
+      return;
+    }
+
+    const selectedCount = BRIEFCASE_SECTIONS.reduce((total, key) => {
+      return total + (briefcaseSelections[key]?.length ?? 0);
+    }, 0);
+
+    if (selectedCount === 0) {
+      setBriefcaseError('Select at least one insight to include in the briefcase.');
+      return;
+    }
+
+    setIsGeneratingBriefcase(true);
+    setBriefcaseError(null);
+    setBriefcaseSuccess(null);
+    setBriefcaseFiles([]);
+    setActivePreviewFile(null);
+    setIsPreviewOpen(false);
+    setBriefcaseMeta(null);
+
+    try {
+      const response = await fetch('/api/analyze/briefcase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repoUrl,
+          repoOwner: owner,
+          repoName,
+          quarter: briefcaseQuarter,
+          analysisContext,
+          sections: sectionData,
+          selections: briefcaseSelections
+        })
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Failed to generate briefcase');
+      }
+
+      const payload = await response.json();
+      const files = payload.files as Array<{ name: string; content: string }>;
+
+      if (!Array.isArray(files) || files.length === 0) {
+        throw new Error('Briefcase response did not include any files');
+      }
+
+      const fallbackRepoLabel = owner && repoName
+        ? `${owner}/${repoName}`
+        : analysisContext.repository?.name ?? repoUrl;
+
+      setBriefcaseFiles(files);
+      setActivePreviewFile(files[0]?.name ?? null);
+      setBriefcaseMeta({
+        generatedAt: typeof payload.generatedAt === 'string' ? payload.generatedAt : new Date().toISOString(),
+        quarter: payload.quarter === 'next' ? 'next' : 'current',
+        repoLabel: payload?.repo?.label ?? fallbackRepoLabel
+      });
+      setIsPreviewOpen(true);
+      setBriefcaseSuccess('Maintainer briefcase ready. Preview the files below or download the zip.');
+    } catch (err) {
+      console.error('Briefcase generation failed:', err);
+      setBriefcaseError(err instanceof Error ? err.message : 'Failed to generate briefcase');
+    } finally {
+      setIsGeneratingBriefcase(false);
+    }
+  };
+
+  const handleDownloadBriefcaseZip = async () => {
+    if (briefcaseFiles.length === 0) {
+      setBriefcaseError('Generate the briefcase before downloading.');
+      return;
+    }
+
+    try {
+      const JSZipFactory = await loadJSZip();
+      const zip = new JSZipFactory();
+      const dateSlug = (briefcaseMeta?.generatedAt ?? new Date().toISOString()).slice(0, 10);
+      const folderName = `maintainer-briefcase-${dateSlug}`;
+
+      briefcaseFiles.forEach((file) => {
+        if (file?.name && typeof file.content === 'string') {
+          zip.file(`${folderName}/${file.name}`, file.content);
+        }
+      });
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(zipBlob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${folderName}.zip`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+
+      setBriefcaseSuccess('Maintainer briefcase downloaded.');
+    } catch (err) {
+      console.error('Briefcase download failed:', err);
+      setBriefcaseError(err instanceof Error ? err.message : 'Failed to download briefcase zip');
+    }
+  };
+
+  const handleCopyMarkdown = async (file: { name: string; content: string }) => {
+    if (!file?.content) {
+      return;
+    }
+    if (!navigator?.clipboard) {
+      setBriefcaseError('Clipboard access is not available in this browser.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(file.content);
+      setBriefcaseSuccess(`${file.name} copied to clipboard.`);
+    } catch (err) {
+      console.error('Copy failed:', err);
+      setBriefcaseError('Failed to copy markdown to clipboard.');
+    }
+  };
+
+  const briefcaseSelectionCounts = BRIEFCASE_SECTIONS.map((key) => ({
+    key,
+    total: sectionData[key].length,
+    selected: briefcaseSelections[key]?.length ?? 0
+  }));
+
+  const totalSelectedForBriefcase = briefcaseSelectionCounts.reduce((sum, entry) => sum + entry.selected, 0);
 
   if (isLoading) {
     return (
@@ -584,6 +837,95 @@ const [collapsedSections, setCollapsedSections] = useState<Record<SectionKey, bo
             </div>
           )}
 
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-12">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+              <div>
+                <h2 className="text-2xl font-semibold text-white mb-1">Maintainer Briefcase</h2>
+                <p className="text-gray-300 text-sm">Compile roadmap, feature specs, and execution checklists into a ready-to-share folder.</p>
+                <div className="mt-4 flex flex-wrap items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm text-gray-300">
+                    Quarter
+                    <select
+                      value={briefcaseQuarter}
+                      onChange={(event) => setBriefcaseQuarter(event.target.value === 'next' ? 'next' : 'current')}
+                      className="bg-slate-900/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
+                    >
+                      <option value="current">Current quarter</option>
+                      <option value="next">Next quarter</option>
+                    </select>
+                  </label>
+                  <span className="text-sm text-gray-400">
+                    Selected insights: {totalSelectedForBriefcase}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={handleGenerateBriefcase}
+                disabled={isGeneratingBriefcase}
+                className={`px-6 py-3 rounded-xl text-white font-medium transition-all duration-200 ${
+                  isGeneratingBriefcase
+                    ? 'bg-white/10 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700'
+                }`}
+              >
+                {isGeneratingBriefcase ? 'Compiling docs…' : 'Generate Maintainer Briefcase'}
+              </button>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              {briefcaseFiles.length > 0 && (
+                <>
+                  <button
+                    onClick={handleDownloadBriefcaseZip}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-colors"
+                  >
+                    Download ZIP
+                  </button>
+                  <button
+                    onClick={() => setIsPreviewOpen(true)}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-colors"
+                  >
+                    Preview Files
+                  </button>
+                </>
+              )}
+              {briefcaseError && (
+                <div className="px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-300">
+                  {briefcaseError}
+                </div>
+              )}
+              {briefcaseSuccess && (
+                <div className="px-3 py-2 bg-green-500/10 border border-green-500/30 rounded-lg text-sm text-green-300">
+                  {briefcaseSuccess}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3 text-xs text-gray-400">
+              {briefcaseSelectionCounts.map(({ key, total, selected }) => {
+                const title = SECTION_RENDER_CONFIG[key].title;
+                const includeButton = total > 0 && selected < total;
+                return (
+                  <div key={key} className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-3 py-1">
+                    <span>{title}: {selected}/{total}</span>
+                    {includeButton && (
+                      <button
+                        type="button"
+                        onClick={() => includeAllInSection(key, total)}
+                        className="text-purple-300 hover:text-purple-200 transition-colors"
+                      >
+                        Include all
+                      </button>
+                    )}
+                    {selected === 0 && total > 0 && (
+                      <span className="text-red-300">Excluded</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="space-y-8 md:space-y-0 md:columns-2 md:gap-8 mb-12">
             {SECTION_ORDER.map((key) => {
               const config = SECTION_RENDER_CONFIG[key];
@@ -605,7 +947,15 @@ const [collapsedSections, setCollapsedSections] = useState<Record<SectionKey, bo
                         : 'max-h-[4000px] opacity-100 translate-y-0'
                     }`}
                   >
-                    {renderSectionContent(key, sectionStatus, sectionData, sectionErrors, sectionNotes)}
+                    {renderSectionContent(
+                      key,
+                      sectionStatus,
+                      sectionData,
+                      sectionErrors,
+                      sectionNotes,
+                      briefcaseSelections,
+                      toggleBriefcaseItem
+                    )}
                   </div>
                 </div>
               );
@@ -613,6 +963,90 @@ const [collapsedSections, setCollapsedSections] = useState<Record<SectionKey, bo
           </div>
         </div>
       </main>
+      {isPreviewOpen && briefcaseFiles.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setIsPreviewOpen(false)}></div>
+          <div className="relative z-10 w-full max-w-5xl bg-slate-900/95 border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Maintainer Briefcase Preview</h3>
+                {briefcaseMeta && (
+                  <p className="text-sm text-gray-400">
+                    Quarter: {briefcaseMeta.quarter === 'current' ? 'Current' : 'Next'} • Generated {new Date(briefcaseMeta.generatedAt).toLocaleString()}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors"
+                aria-label="Close preview"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex flex-col md:flex-row flex-1 min-h-0">
+              <div className="w-full md:w-60 border-b md:border-b-0 md:border-r border-white/10 bg-white/5 overflow-y-auto max-h-48 md:max-h-full">
+                <ul className="divide-y divide-white/10">
+                  {briefcaseFiles.map((file) => {
+                    const isActive = file.name === activePreviewFile;
+                    return (
+                      <li key={file.name}>
+                        <button
+                          onClick={() => setActivePreviewFile(file.name)}
+                          className={`w-full text-left px-4 py-3 text-sm transition-colors ${
+                            isActive ? 'bg-purple-500/20 text-white' : 'text-gray-300 hover:bg-white/10'
+                          }`}
+                        >
+                          {file.name}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+              <div className="flex-1 px-6 py-4 min-h-0">
+                {(() => {
+                  const active = briefcaseFiles.find((file) => file.name === activePreviewFile) ?? briefcaseFiles[0];
+                  if (!active) {
+                    return <p className="text-sm text-gray-300">Select a file to preview its markdown.</p>;
+                  }
+                  return (
+                    <div className="flex flex-col h-full">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                        <div>
+                          <p className="text-sm text-gray-400">{active.name}</p>
+                          {briefcaseMeta?.repoLabel && (
+                            <p className="text-xs text-gray-500">{briefcaseMeta.repoLabel}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleCopyMarkdown(active)}
+                            className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-colors"
+                          >
+                            Copy Markdown
+                          </button>
+                          <button
+                            onClick={handleDownloadBriefcaseZip}
+                            className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-colors"
+                          >
+                            Download ZIP
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex-1 overflow-auto bg-black/40 border border-white/10 rounded-xl">
+                        <pre className="p-4 text-sm text-gray-200 whitespace-pre-wrap font-mono">{active.content}</pre>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -659,7 +1093,9 @@ type RenderSectionContentProps = [
   SectionStatusMap,
   SectionData,
   SectionErrors,
-  SectionNotes
+  SectionNotes,
+  Record<SectionKey, number[]>,
+  (section: SectionKey, index: number) => void
 ];
 
 function renderSectionContent(
@@ -667,12 +1103,33 @@ function renderSectionContent(
   statusMap: RenderSectionContentProps[1],
   dataMap: RenderSectionContentProps[2],
   errorMap: RenderSectionContentProps[3],
-  noteMap: RenderSectionContentProps[4]
+  noteMap: RenderSectionContentProps[4],
+  selectionMap: RenderSectionContentProps[5],
+  toggleSelection: RenderSectionContentProps[6]
 ) {
   const status = statusMap[section];
   const error = errorMap[section];
   const items = dataMap[section] as unknown[];
   const note = noteMap[section];
+  const selectedIndices = new Set(selectionMap[section] ?? []);
+
+  const renderToggle = (index: number) => {
+    const selected = selectedIndices.has(index);
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSelection(section, index)}
+        className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+          selected
+            ? 'bg-purple-500/20 text-purple-200 border-purple-400/40'
+            : 'bg-white/10 text-gray-300 border-white/20 hover:bg-white/20'
+        }`}
+        aria-pressed={selected}
+      >
+        {selected ? 'Included' : 'Add to Briefcase'}
+      </button>
+    );
+  };
 
   if (status === 'loading' || status === 'idle') {
     return (
@@ -706,44 +1163,50 @@ function renderSectionContent(
       content = (items as RoadmapItem[]).map((item, index) => (
         <div key={index} className="p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200">
           <div className="flex items-start justify-between mb-3">
-            <h3 className="text-lg font-semibold text-white">{item.title}</h3>
-            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('priority', item.priority)}`}>
-              {item.priority}
-            </span>
+            <div>
+              <h3 className="text-lg font-semibold text-white">{item.title}</h3>
+              <p className="text-sm text-gray-300">{item.outcome}</p>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('priority', item.priority)}`}>
+                {item.priority}
+              </span>
+              {renderToggle(index)}
+            </div>
           </div>
-          <p className="text-gray-300 mb-3">{item.outcome}</p>
-          {item.estimatedEffort && (
-            <div className="flex items-center space-x-2 text-sm text-gray-400">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>Estimated effort: {item.estimatedEffort}</span>
+          {item.owners && item.owners.length > 0 && (
+            <div className="mb-3 text-sm text-gray-300">
+              <strong className="text-gray-200">Owners:</strong> {item.owners.join(', ')}
             </div>
           )}
-          {item.keyTasks && item.keyTasks.length > 0 && (
-            <div className="mt-3">
-              <p className="text-sm text-gray-400 mb-1">Key tasks:</p>
-              <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
-                {item.keyTasks.map((task, idx) => (
-                  <li key={idx}>{task}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {Array.isArray(item.references) && item.references.length > 0 ? (
-            <div className="mt-3">
-              <p className="text-sm text-gray-400 mb-1">Supporting references:</p>
-              <ul className="space-y-1 text-sm">
-                {item.references.map((ref, idx) => (
-                  <li key={idx}>
-                    <ReferenceAnchor reference={ref} />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <ReferenceLink reference={item.reference} />
-          )}
+          <div className="grid gap-3">
+            {item.keyTasks && item.keyTasks.length > 0 && (
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Key tasks:</p>
+                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  {item.keyTasks.map((task, idx) => (
+                    <li key={idx}>{task}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {item.successCriteria && item.successCriteria.length > 0 && (
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Success criteria:</p>
+                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  {item.successCriteria.map((criterion, idx) => (
+                    <li key={idx}>{criterion}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {item.estimatedEffort && (
+              <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
+                <strong>Effort estimate:</strong> {item.estimatedEffort}
+              </div>
+            )}
+          </div>
+          <ReferencesBlock references={item.references} reference={item.reference} />
         </div>
       ));
       break;
@@ -751,32 +1214,62 @@ function renderSectionContent(
       content = (items as VulnerabilityItem[]).map((item, index) => (
         <div key={index} className="p-6 bg-red-500/10 border border-red-500/20 rounded-xl">
           <div className="flex items-start justify-between mb-3">
-            <h3 className="text-lg font-semibold text-white">{item.title}</h3>
-            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('severity', item.severity)}`}>
-              {item.severity}
-            </span>
+            <div>
+              <h3 className="text-lg font-semibold text-white">{item.title}</h3>
+              <p className="text-sm text-gray-300">{item.description}</p>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('severity', item.severity)}`}>
+                {item.severity}
+              </span>
+              {renderToggle(index)}
+            </div>
           </div>
-          <p className="text-gray-300 mb-3">{item.description}</p>
-          {item.recommendation && (
-            <div className="p-3 bg-white/5 rounded-lg">
-              <p className="text-sm text-gray-300">
-                <strong>Recommendation:</strong> {item.recommendation}
-              </p>
+          {item.owners && item.owners.length > 0 && (
+            <div className="mb-3 text-sm text-gray-300">
+              <strong className="text-gray-200">Owners:</strong> {item.owners.join(', ')}
             </div>
           )}
-          <ReferenceLink reference={item.reference} />
+          {item.recommendation && (
+            <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300 mb-3">
+              <strong>Recommendation:</strong> {item.recommendation}
+            </div>
+          )}
+          <div className="grid gap-3">
+            {item.effortEstimate && (
+              <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
+                <strong>Effort estimate:</strong> {item.effortEstimate}
+              </div>
+            )}
+            {item.validationSteps && item.validationSteps.length > 0 && (
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Validation steps:</p>
+                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  {item.validationSteps.map((step, idx) => (
+                    <li key={idx}>{step}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          <ReferencesBlock references={item.references} reference={item.reference} />
         </div>
       ));
       break;
     case 'teamAssignments':
       content = (items as AssignmentItem[]).map((item, index) => (
         <div key={index} className="p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200">
-          <h3 className="text-lg font-semibold text-white mb-2">{item.task}</h3>
-          <div className="flex items-center space-x-2 mb-3">
-            <span className="text-gray-400">Suggested role:</span>
-            <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium">
-              {item.assignee}
-            </span>
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <h3 className="text-lg font-semibold text-white">{item.task}</h3>
+              <div className="flex items-center space-x-2 text-sm text-gray-300">
+                <span className="text-gray-400">Suggested role:</span>
+                <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium">
+                  {item.assignee}
+                </span>
+              </div>
+            </div>
+            {renderToggle(index)}
           </div>
           <p className="text-gray-300 mb-3">{item.rationale}</p>
           {item.supportPlan && (
@@ -784,7 +1277,7 @@ function renderSectionContent(
               <strong>Support plan:</strong> {item.supportPlan}
             </div>
           )}
-          <ReferenceLink reference={item.reference} />
+          <ReferencesBlock references={undefined} reference={item.reference} />
         </div>
       ));
       break;
@@ -792,28 +1285,64 @@ function renderSectionContent(
       content = (items as FeatureItem[]).map((item, index) => (
         <div key={index} className="p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200">
           <div className="flex items-start justify-between mb-3">
-            <h3 className="text-lg font-semibold text-white">{item.title}</h3>
-            <div className="flex space-x-2">
-              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('impact', item.impact)}`}>
-                {item.impact} Impact
-              </span>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('complexity', item.complexity)}`}>
-                {item.complexity}
-              </span>
+            <div>
+              <h3 className="text-lg font-semibold text-white">{item.title}</h3>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('impact', item.impact)}`}>
+                  {item.impact} Impact
+                </span>
+                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('complexity', item.complexity)}`}>
+                  {item.complexity}
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              {item.owners && item.owners.length > 0 && (
+                <span className="text-xs text-gray-300">Owners: {item.owners.join(', ')}</span>
+              )}
+              {renderToggle(index)}
             </div>
           </div>
-          <p className="text-gray-300 mb-3">{item.userValue}</p>
-          {item.successCriteria && item.successCriteria.length > 0 && (
-            <div className="mt-3">
-              <p className="text-sm text-gray-400 mb-1">Success criteria:</p>
-              <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
-                {item.successCriteria.map((criterion, idx) => (
-                  <li key={idx}>{criterion}</li>
-                ))}
-              </ul>
+          {item.background && (
+            <div className="mb-3">
+              <p className="text-sm text-gray-400 mb-1">Background</p>
+              <p className="text-sm text-gray-300">{item.background}</p>
             </div>
           )}
-          <ReferenceLink reference={item.reference} />
+          <p className="text-gray-300 mb-3">{item.userValue}</p>
+          <div className="grid gap-3">
+            {item.technicalConsiderations && item.technicalConsiderations.length > 0 && (
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Technical considerations:</p>
+                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  {item.technicalConsiderations.map((point, idx) => (
+                    <li key={idx}>{point}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {item.successCriteria && item.successCriteria.length > 0 && (
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Success criteria:</p>
+                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  {item.successCriteria.map((criterion, idx) => (
+                    <li key={idx}>{criterion}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {item.openQuestions && item.openQuestions.length > 0 && (
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Open questions:</p>
+                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  {item.openQuestions.map((question, idx) => (
+                    <li key={idx}>{question}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          <ReferencesBlock references={item.references} reference={item.reference} />
         </div>
       ));
       break;
@@ -821,28 +1350,50 @@ function renderSectionContent(
       content = (items as TechnicalDebtItem[]).map((item, index) => (
         <div key={index} className="p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200">
           <div className="flex items-start justify-between mb-3">
-            <h3 className="text-lg font-semibold text-white">{item.issue}</h3>
-            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('priority', item.priority)}`}>
-              {item.priority}
-            </span>
+            <div>
+              <h3 className="text-lg font-semibold text-white">{item.issue}</h3>
+              <p className="text-sm text-gray-300">{item.impact}</p>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('priority', item.priority)}`}>
+                {item.priority}
+              </span>
+              {renderToggle(index)}
+            </div>
           </div>
-          <p className="text-gray-300 mb-3">{item.impact}</p>
-          {item.recommendedActions && item.recommendedActions.length > 0 && (
-            <div className="mt-3">
-              <p className="text-sm text-gray-400 mb-1">Recommended actions:</p>
-              <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
-                {item.recommendedActions.map((action, idx) => (
-                  <li key={idx}>{action}</li>
-                ))}
-              </ul>
+          {item.owners && item.owners.length > 0 && (
+            <div className="mb-3 text-sm text-gray-300">
+              <strong className="text-gray-200">Owners:</strong> {item.owners.join(', ')}
             </div>
           )}
-          {item.effortEstimate && (
-            <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
-              <strong>Effort:</strong> {item.effortEstimate}
-            </div>
-          )}
-          <ReferenceLink reference={item.reference} />
+          <div className="grid gap-3">
+            {item.recommendedActions && item.recommendedActions.length > 0 && (
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Recommended actions:</p>
+                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  {item.recommendedActions.map((action, idx) => (
+                    <li key={idx}>{action}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {item.validationSteps && item.validationSteps.length > 0 && (
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Validation steps:</p>
+                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  {item.validationSteps.map((step, idx) => (
+                    <li key={idx}>{step}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {item.effortEstimate && (
+              <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
+                <strong>Effort:</strong> {item.effortEstimate}
+              </div>
+            )}
+          </div>
+          <ReferencesBlock references={item.references} reference={item.reference} />
         </div>
       ));
       break;
@@ -850,26 +1401,43 @@ function renderSectionContent(
       content = (items as PerformanceItem[]).map((item, index) => (
         <div key={index} className="p-6 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200">
           <div className="flex items-start justify-between mb-3">
-            <h3 className="text-lg font-semibold text-white">{item.area}</h3>
-            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('impact', item.expectedImpact)}`}>
-              {item.expectedImpact} Impact
-            </span>
+            <div>
+              <h3 className="text-lg font-semibold text-white">{item.area}</h3>
+              <p className="text-sm text-gray-300">{item.problemStatement}</p>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeClass('impact', item.expectedImpact)}`}>
+                {item.expectedImpact} Impact
+              </span>
+              {renderToggle(index)}
+            </div>
           </div>
-          <p className="text-gray-300 mb-3">{item.problemStatement}</p>
+          {item.owners && item.owners.length > 0 && (
+            <div className="mb-3 text-sm text-gray-300">
+              <strong className="text-gray-200">Owners:</strong> {item.owners.join(', ')}
+            </div>
+          )}
           <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300 mb-3">
             <strong>Recommendation:</strong> {item.recommendation}
           </div>
-          {item.validationPlan && item.validationPlan.length > 0 && (
-            <div className="mt-3">
-              <p className="text-sm text-gray-400 mb-1">Validation plan:</p>
-              <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
-                {item.validationPlan.map((step, idx) => (
-                  <li key={idx}>{step}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <ReferenceLink reference={item.reference} />
+          <div className="grid gap-3">
+            {item.validationPlan && item.validationPlan.length > 0 && (
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Validation plan:</p>
+                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  {item.validationPlan.map((step, idx) => (
+                    <li key={idx}>{step}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {item.effortEstimate && (
+              <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
+                <strong>Effort estimate:</strong> {item.effortEstimate}
+              </div>
+            )}
+          </div>
+          <ReferencesBlock references={item.references} reference={item.reference} />
         </div>
       ));
       break;
@@ -877,8 +1445,15 @@ function renderSectionContent(
       content = null;
   }
 
+  const showExclusionHint = items.length > 0 && selectedIndices.size === 0 && BRIEFCASE_SECTIONS.includes(section);
+
   return (
     <>
+      {showExclusionHint && (
+        <div className="mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-sm text-yellow-200">
+          All items are currently excluded from the briefcase. Toggle any card to include it.
+        </div>
+      )}
       {content}
       {note && (
         <div className="mt-3 p-3 bg-white/5 border border-white/10 rounded-lg text-sm text-gray-300">
@@ -911,14 +1486,55 @@ function ReferenceAnchor({ reference, label }: { reference?: ReferenceInfo | nul
   );
 }
 
-function ReferenceLink({ reference, label }: { reference?: ReferenceInfo | null; label?: string }) {
-  if (!reference?.url) {
+function ReferencesBlock({
+  references,
+  reference,
+  label
+}: {
+  references?: ReferenceInfo[];
+  reference?: ReferenceInfo | null;
+  label?: string;
+}) {
+  const entries: ReferenceInfo[] = [];
+
+  const pushIfValid = (ref?: ReferenceInfo | null) => {
+    if (ref?.url) {
+      entries.push({ title: ref.title ?? '', url: ref.url });
+    }
+  };
+
+  if (Array.isArray(references)) {
+    references.forEach((ref) => pushIfValid(ref));
+  }
+
+  pushIfValid(reference);
+
+  const uniqueByUrl = new Map<string, ReferenceInfo>();
+  entries.forEach((ref) => {
+    const url = ref.url.trim();
+    if (!uniqueByUrl.has(url)) {
+      uniqueByUrl.set(url, { title: ref.title, url });
+    }
+  });
+
+  const uniqueEntries = Array.from(uniqueByUrl.values());
+
+  if (uniqueEntries.length === 0) {
     return null;
   }
 
+  const heading = label ?? 'References';
+
   return (
     <div className="mt-3">
-      <ReferenceAnchor reference={reference} label={label} />
+      <p className="text-sm text-gray-400 mb-1">{heading}</p>
+      <ul className="list-disc list-inside text-sm text-purple-200 space-y-1">
+        {uniqueEntries.map((ref, index) => (
+          <li key={ref.url ?? index}>
+            <ReferenceAnchor reference={ref} />
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
