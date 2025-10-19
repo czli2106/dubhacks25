@@ -1,29 +1,25 @@
-# AI PM - Product Management Analysis Tool
+# OpenCompass - AI-Powered GitHub Repository Analysis & Maintainer Briefings
 
-A comprehensive AI-powered product management analysis tool that analyzes GitHub repositories and provides actionable insights for product managers.
+A comprehensive AI-powered product management analysis tool that analyzes GitHub repositories, delivers evidence-backed insights, and compiles maintainer-ready briefing docs in seconds.
 
 ## 🚀 Features
 
-### **Frontend (Next.js)**
-- **Modern UI**: Beautiful, responsive interface with animations
-- **Repository Analysis**: Enter any GitHub repository URL for analysis
-- **Real-time Loading**: Shows recent commits while AI analyzes
-- **Deep Insights**: Comprehensive product management analysis
-- **GitHub Integration**: Direct links to original GitHub resources
+### Insight Console
+- **Repository deep dive**: Paste any public GitHub repo URL and receive roadmap, feature, debt, performance, team, and security insights.
+- **Context caching**: Analysis context and AI sections persist in session storage so an interrupted session can be restored without re-fetching data.
+- **Evidence-first cards**: Each recommendation cites verified commits, issues, or PRs with canonical links.
 
-### **Server (Next.js API Routes)**
-- **GitHub Aggregation**: Securely fetches commits, issues, PRs, and repo metadata via Octokit
-- **AI Prompting**: Maintains structured prompt templates used to guide the OpenAI analysis
-- **Secret Management**: Runs entirely server-side, so API keys stay off the client
-- **Resilient Defaults**: Graceful fallbacks if the OpenAI response cannot be parsed
+### Maintainer Briefcase
+- **Quarter targeting**: Choose whether to assemble docs for the current or next quarter before generating outputs.
+- **Per-card toggles**: Flip the briefcase icon on any roadmap/feature/debt/performance/vulnerability card to include or exclude it. Included cards receive a subtle highlight.
+- **Deterministic docs**: A dedicated `/api/analyze/briefcase` endpoint normalizes selected items and renders three markdown files (quarterly roadmap, feature specs, execution checklist) using reusable templates.
+- **Preview & export**: Open the preview modal to tab through each markdown file, copy to clipboard, or download a zipped folder ready for `/docs/insights/YYYY-MM-DD/`.
 
-### **AI Analysis Categories**
-1. **Product Roadmap** - Strategic roadmap recommendations
-2. **Security & Vulnerabilities** - Security assessment and recommendations
-3. **Team Assignments** - Team assignment recommendations
-4. **New Features** - Feature suggestions based on analysis
-5. **Technical Debt** - Technical debt identification and prioritization
-6. **Performance** - Performance optimization opportunities
+### Platform & Integrations
+- **Next.js app router** frontend with animated loading states and responsive layouts.
+- **API routes** for gathering GitHub context, orchestrating section-level AI calls, and generating markdown outputs.
+- **Octokit + OpenAI** powered backend, with all tokens kept server-side.
+- **Prompt templates** per insight category to keep OpenAI responses structured and reference-heavy.
 
 ## 🛠️ Quick Start
 
@@ -31,7 +27,7 @@ A comprehensive AI-powered product management analysis tool that analyzes GitHub
 
 ```bash
 # Clone and navigate to the project
-cd ai-pm
+cd dubhacks25
 
 # Run the automated startup script
 ./start-system.sh
@@ -83,17 +79,18 @@ npm run dev
 ## 📊 How It Works
 
 ### **User Flow**
-1. **Enter Repository**: User enters GitHub repository URL
-2. **Loading Phase**: System fetches commits and shows recent activity
-3. **AI Analysis**: AI analyzes repository data using customizable prompts
-4. **Insights Display**: Comprehensive analysis with actionable recommendations
+1. **Enter Repository**: Paste a GitHub URL from the landing page.
+2. **Context Gathering**: The app pulls recent commits, issues, and PRs and stores the context client-side for reuse.
+3. **Insight Generation**: Each section is requested sequentially, surfaces the AI response, and normalizes references/owners/success criteria.
+4. **Curation**: Maintainers toggle the briefcase icon on the cards they want to export and choose the quarter.
+5. **Briefcase Export**: With one click, the app compiles markdown docs, opens a preview modal, and offers copy/ZIP download options.
 
 ### **Technical Flow**
-1. **Frontend** → Sends the repository URL to `/api/analyze/context` to gather commits/issues/PR data
-2. **Next.js API** → Aggregates GitHub context, stores it client-side, and redirects to the insights view
-3. **Frontend** → Sequentially calls `/api/analyze/section` for each insight category, streaming results into the UI
-4. **OpenAI API** → Returns JSON for each section following the enforced schema (including references and optional notes)
-5. **Frontend** → Renders each section as it arrives, showing notes when no recommendations are available
+1. **Frontend ➜ `/api/analyze/context`** collects repository metadata plus up to 20 commits, 10 issues, and 10 PRs via Octokit.
+2. **Client-side cache** stores the returned context in `sessionStorage` so a browser refresh can restore the analysis session.
+3. **Frontend ➜ `/api/analyze/section`** posts the cached context alongside the requested section key. The route enforces strict JSON schemas, normalizes references, and coalesces string arrays.
+4. **OpenAI Responses** are parsed, validated, and rehydrated with canonical GitHub links before being dispatched back to the UI.
+5. **Frontend ➜ `/api/analyze/briefcase`** sends the aggregated section data, selected card indices, and quarter choice. The API normalizes items, renders markdown through `lib/briefcaseMarkdown.ts`, and returns the final files for preview/download.
 
 ## 🏗️ Architecture
 
@@ -111,14 +108,22 @@ npm run dev
 ## 📁 Project Structure
 
 ```
-ai-pm/
-├── app/                    # Next.js frontend
-│   ├── api/               # API routes
-│   ├── loading/           # Loading page
-│   ├── insights/          # Insights page
-│   └── page.tsx           # Main page
-├── start-system.sh       # Automated startup script
-└── README.md             # This file
+dubhacks25/
+├── app/                              # Next.js frontend + API routes
+│   ├── api/
+│   │   ├── analyze/
+│   │   │   ├── context/             # GitHub context aggregation
+│   │   │   ├── section/             # Section-level AI calls
+│   │   │   └── briefcase/           # Markdown briefcase generator
+│   │   └── briefcase/               # Legacy briefcase endpoint (unused in UI)
+│   ├── insights/                    # Insights console UI
+│   ├── loading/                     # Animated loading screen
+│   └── page.tsx                     # Landing page
+├── lib/
+│   └── briefcaseMarkdown.ts         # Deterministic markdown render helpers
+├── prompts/                         # Prompt templates per insight section
+├── start-system.sh                  # Automated startup script
+└── README.md                        # This file
 ```
 
 ## 🔒 Security
@@ -152,9 +157,10 @@ npm start
 - Ensure the JSON fields stay aligned with `SECTION_RESPONSE_SHAPES` (reference titles + URLs, optional notes, array fields, etc.)
 
 ### **API Integration**
-- Next.js API routes expose the analysis endpoints
-- Frontend consumes those routes via the built-in fetch API
-- External integrations rely on GitHub and OpenAI services only
+- `/api/analyze/context` gathers GitHub repo context (commits/issues/PRs) via Octokit.
+- `/api/analyze/section` prompts OpenAI for each insight category using strict JSON schemas and reference normalization.
+- `/api/analyze/briefcase` turns selected insights into deterministic markdown files for export.
+- Frontend calls each route with the native fetch API; all tokens remain server-side.
 
 ## 📝 Environment Variables
 
@@ -187,6 +193,7 @@ If you encounter any issues:
 
 ## 🎯 Roadmap
 
+- [x] Maintainer briefcase export (quarter picker, card-level selection, markdown preview & ZIP)
 - [ ] User authentication and authorization
 - [ ] Multiple repository analysis
 - [ ] Export insights to PDF/CSV
