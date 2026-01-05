@@ -1,4 +1,4 @@
-# OpenCompass - AI-Powered GitHub Repository Analysis & Maintainer Briefings
+# OpenCompass - AI-Powered GitHub Repository Analysis & Maintainer Briefings [https://www.opencompass.us/]
 
 A comprehensive AI-powered product management analysis tool that analyzes GitHub repositories, delivers evidence-backed insights, and compiles maintainer-ready briefing docs in seconds.
 
